@@ -28,13 +28,24 @@ where = ["src", "."]
 include = ["nanonerd*"]
 
 [tool.deadcode]
+# NOTE: deadcode matches these patterns against the full relative path with
+# fnmatch (glob semantics, `*` crosses `/`), anchored on the *entire* string.
+# A pattern ending in `/` (e.g. ".venv/") can therefore never match, since no
+# walked path ever ends with a trailing slash — every entry below uses a
+# trailing `*` instead so it matches both the directory itself and everything
+# nested under it.
 exclude = [
-    ".venv/",
-    "build/",
-    "dist/",
-    "**/site-packages/",
-    "migrations/",
-    "web/",
+    ".venv",
+    ".venv/*",
+    "build",
+    "build/*",
+    "dist",
+    "dist/*",
+    "**/site-packages/*",
+    "migrations",
+    "migrations/*",
+    "web",
+    "web/*",
 ]
 ignore-names = [
     "__all__",
@@ -45,6 +56,10 @@ ignore-names = [
     "logger",
     "LOGGER",
     "*_fixture",
+    # Persisted audit/debug timestamp column: set in the pipeline, not read
+    # back by any current code path, but is a real schema field kept for
+    # observability/future use, not dead code.
+    "extracted_at",
 ]
 ignore-names-in-files = [
     "*/__init__.py",
