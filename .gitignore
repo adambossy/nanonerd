@@ -217,3 +217,7 @@ __marimo__/
 
 # Database files
 *.db
+
+node_modules/
+web/dist/
+reader.db

@@ -8,7 +8,17 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "alembic>=1.13",
+    "anthropic>=0.40",
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "lxml>=5.2",
+    "psycopg[binary]>=3.2",
+    "sqlalchemy>=2.0.30",
+    "trafilatura>=2.0",
+    "uvicorn[standard]>=0.30",
+]
 
 [tool.setuptools]
 package-dir = {"nanonerd" = "src/nanonerd"}
@@ -23,6 +33,8 @@ exclude = [
     "build/",
     "dist/",
     "**/site-packages/",
+    "migrations/",
+    "web/",
 ]
 ignore-names = [
     "__all__",
@@ -38,6 +50,8 @@ ignore-names-in-files = [
     "*/__init__.py",
     "tests/**",
     "test/**",
+    "src/nanonerd/reader/api.py",
+    "src/nanonerd/reader/main.py",
 ]
 ignore-definitions = [
     "Migration",
@@ -52,6 +66,7 @@ ignore-definitions-if-inherits-from = [
 [dependency-groups]
 dev = [
     "deadcode>=2.4.1",
+    "lxml-stubs>=0.5",
     "mypy>=1.18.2",
     "pytest>=9.0.0",
     "ruff>=0.14.4",
