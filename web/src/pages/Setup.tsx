@@ -19,7 +19,20 @@ export default function Setup() {
         <Link to="/">home</Link>
       </nav>
       <main className="setup">
-        <h2>Bookmarklet (Chrome / Arc)</h2>
+        <h2>Browser extension (Chrome / Arc — recommended)</h2>
+        <p>
+          The extension saves from a background worker, so it works even on
+          sites whose Content Security Policy blocks the bookmarklet. One-time
+          install:
+        </p>
+        <ol>
+          <li>Open <code>chrome://extensions</code> (Arc: same address) and enable <strong>Developer mode</strong> (top right).</li>
+          <li>Click <strong>Load unpacked</strong> and pick the <code>extension/</code> folder in the nanonerd repo.</li>
+          <li>Pin the icon, then click it on any page to save — or press <strong>⌘⇧S</strong>, or right-click a link → <strong>Save link to nano::nerd</strong>.</li>
+          <li>If your reader isn't at <code>http://localhost:8000</code>, set the API URL in the extension's Options.</li>
+        </ol>
+
+        <h2>Bookmarklet (fallback)</h2>
         <p>
           Drag this button to your bookmarks bar. Click it on any article to
           save it here.
@@ -27,8 +40,8 @@ export default function Setup() {
         <div dangerouslySetInnerHTML={{ __html: anchorHtml }} />
         <p>
           Some sites block cross-origin requests with a strict Content
-          Security Policy; if the toast never appears, paste the URL into the
-          API directly (see below).
+          Security Policy; if the toast never appears, use the extension or
+          the API directly (see below).
         </p>
 
         <h2>iPhone share sheet</h2>

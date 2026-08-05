@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "nano::nerd",
+  "version": "0.1.0",
+  "description": "Save the current page to your nano::nerd read-later list.",
+  "icons": { "128": "icon128.png" },
+  "action": {
+    "default_icon": { "128": "icon128.png" },
+    "default_title": "Save to nano::nerd"
+  },
+  "background": { "service_worker": "background.js" },
+  "options_page": "options.html",
+  "permissions": ["storage", "activeTab", "contextMenus"],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "https://nanonerd-reader.fly.dev/*"
+  ],
+  "commands": {
+    "save-page": {
+      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
+      "description": "Save the current page to nano::nerd"
+    }
+  }
+}
