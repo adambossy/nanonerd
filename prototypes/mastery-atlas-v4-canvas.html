@@ -213,6 +213,10 @@ function resize() {
   dpr = window.devicePixelRatio || 1;
   vw = window.innerWidth; vh = window.innerHeight;
   cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
+  /* explicit CSS size so one backing pixel maps to one device pixel —
+     without this, retina displays resample the canvas and blur it */
+  cv.style.width = vw + "px";
+  cv.style.height = vh + "px";
 }
 window.addEventListener("resize", () => { resize(); goal = fitBounds(focusNode.rect); });
 resize();
@@ -447,6 +451,7 @@ function drawChip(x, y, title, sub) {
 }
 
 const scr = b => ({ x: b.x * cam.k + cam.tx, y: b.y * cam.k + cam.ty, w: b.w * cam.k, h: b.h * cam.k });
+let snapPx = false; /* pixel-align only when the camera is at rest */
 
 function nodeAlpha(node) {
   if (focusNode === root) return 1;
@@ -459,18 +464,27 @@ function nodeAlpha(node) {
 function drawNode(node) {
   const s = scr(node.rect);
   if (s.x > vw + 60 || s.y > vh + 60 || s.x + s.w < -60 || s.y + s.h < -60) return;
+  /* at rest, land every edge on the device-pixel grid — fractional
+     coordinates antialias into softness, worst on small cells */
+  if (snapPx) {
+    const x2 = Math.round((s.x + s.w) * dpr) / dpr, y2 = Math.round((s.y + s.h) * dpr) / dpr;
+    s.x = Math.round(s.x * dpr) / dpr; s.y = Math.round(s.y * dpr) / dpr;
+    s.w = x2 - s.x; s.h = y2 - s.y;
+  }
   const expand = node.children && s.w > 24;
-  const r = Math.max(2, Math.min(10, s.w * 0.03));
+  const r = Math.min(10, Math.max(1, s.w * 0.035));
 
   if (!expand) {
     ctx.globalAlpha = nodeAlpha(node);
     ctx.fillStyle = TH[nodeBand(node)];
     rr(s.x, s.y, s.w, s.h, r);
     ctx.fill();
-    ctx.strokeStyle = TH.ring;
-    ctx.lineWidth = 1;
-    rr(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1, r);
-    ctx.stroke();
+    if (s.w > 10) { /* tiny cells get no ring — it just reads as halo */
+      ctx.strokeStyle = TH.ring;
+      ctx.lineWidth = 1;
+      rr(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1, r);
+      ctx.stroke();
+    }
 
     /* semantic labels: appear as the node earns the pixels */
     if (s.w > 220) {
@@ -525,6 +539,7 @@ function draw() {
   ctx.fillStyle = TH.page;
   ctx.fillRect(0, 0, vw, vh);
 
+  snapPx = !goal && !pinchStart;
   drawNode(root);
 
   /* hover: wash the whole region — cells AND the gaps between them */
