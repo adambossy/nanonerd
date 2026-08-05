@@ -79,18 +79,35 @@ const FACET_POOL = [
   "Core intuition", "Formal definition", "Key properties", "Worked examples",
   "Common pitfalls", "Implementation in code", "Connections & applications", "Practice problems",
 ];
+/* Questions are the true frontier: mastering any node means answering its
+   questions correctly, and every color above is a rollup of them. */
+const QTYPES = ["Recall", "Explain", "Derive", "Apply", "Compute", "Compare", "Debug", "Estimate"];
+function questionsFor(path, mastery) {
+  const rng = mulberry32(hashStr(path + "/questions"));
+  const nq = 5 + Math.floor(rng() * 6); /* 5–10 questions per facet */
+  return Array.from({ length: nq }, (_, i) => {
+    const type = QTYPES[Math.floor(rng() * QTYPES.length)];
+    let score = null;
+    if (mastery != null && rng() < 0.95) {
+      score = rng() * 100 < mastery
+        ? Math.round(80 + rng() * 20)  /* answered correctly */
+        : Math.round(5 + rng() * 45);  /* missed it */
+    }
+    return { name: `Q${i + 1} · ${type}`, score, children: null };
+  });
+}
 function facetsFor(path, parentScore) {
   const rng = mulberry32(hashStr(path + "/facets"));
   const count = 4 + Math.floor(rng() * 3);
   const start = Math.floor(rng() * FACET_POOL.length);
   return Array.from({ length: count }, (_, k) => {
     const name = FACET_POOL[(start + k) % FACET_POOL.length];
-    let score = null;
+    let mastery = null;
     if (parentScore != null) {
       const g = gauss(rng);
-      score = rng() < 0.1 ? null : Math.max(4, Math.min(100, Math.round(parentScore + g * 8)));
+      mastery = rng() < 0.1 ? null : Math.max(4, Math.min(100, Math.round(parentScore + g * 8)));
     }
-    return { name, score, children: null };
+    return { name, score: null, children: questionsFor(`${path}/${name}`, mastery) };
   });
 }
 
@@ -210,8 +227,13 @@ function fitBounds(b) {
   const k = Math.min(vw / (b.w * (1 + 2 * pad)), vh / (b.h * (1 + 2 * pad)));
   return { k, tx: vw / 2 - k * (b.x + b.w / 2), ty: vh / 2 - k * (b.y + b.h / 2) };
 }
+let MIN_W = root.rect.w;
+(function scan(n) {
+  if (!n.children) { MIN_W = Math.min(MIN_W, n.rect.w); return; }
+  n.children.forEach(scan);
+})(root);
 const KMIN = () => fitBounds(root.rect).k * 0.5;
-const KMAX = () => fitBounds({ x: 0, y: 0, w: 60, h: 60 }).k * 1.5;
+const KMAX = () => fitBounds({ x: 0, y: 0, w: MIN_W, h: MIN_W }).k * 1.5;
 
 /* Descend one grid step toward the point; null if outside / spare slot. */
 function stepInto(node, p) {
