@@ -14,7 +14,8 @@ export function getArticle(id: number): Promise<ArticleDetail> {
 }
 
 export async function retryArticle(id: number): Promise<void> {
-  await fetch(`/api/articles/${id}/retry`, { method: "POST" });
+  const response = await fetch(`/api/articles/${id}/retry`, { method: "POST" });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 }
 
 export function markProgress(
@@ -26,7 +27,11 @@ export function markProgress(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chunk_ids: chunkIds }),
-  }).catch(() => onFail(chunkIds));
+  })
+    .then((response) => {
+      if (!response.ok) onFail(chunkIds);
+    })
+    .catch(() => onFail(chunkIds));
 }
 
 export function beaconProgress(id: number, chunkIds: number[]): void {

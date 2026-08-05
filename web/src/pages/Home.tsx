@@ -99,7 +99,9 @@ export default function Home() {
             key={article.id}
             article={article}
             onRetry={() => {
-              void retryArticle(article.id).then(refresh);
+              void retryArticle(article.id)
+                .catch(() => undefined)
+                .then(() => refresh());
             }}
           />
         ))}
