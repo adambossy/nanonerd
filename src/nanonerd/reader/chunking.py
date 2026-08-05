@@ -1,12 +1,17 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol
 
 from lxml import html as lxml_html
-from lxml.html import HtmlElement
 
 MIN_CHUNK_WORDS = 150
 MAX_CHUNK_WORDS = 300
 _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+
+
+class _Element(Protocol):
+    tag: str | object
+
+    def text_content(self) -> str: ...
 
 
 @dataclass
@@ -20,11 +25,11 @@ def html_to_text(content_html: str) -> str:
     return " ".join(root.text_content().split())
 
 
-def _word_count(element: Any) -> int:
+def _word_count(element: _Element) -> int:
     return len(element.text_content().split())
 
 
-def _serialize(elements: list[Any]) -> str:
+def _serialize(elements: list[_Element]) -> str:
     return "".join(
         lxml_html.tostring(element, encoding="unicode") for element in elements
     )
@@ -32,10 +37,10 @@ def _serialize(elements: list[Any]) -> str:
 
 def chunk_html(content_html: str) -> list[ChunkData]:
     root = lxml_html.fragment_fromstring(content_html, create_parent="div")
-    blocks = [child for child in root if isinstance(child.tag, str)]
+    blocks: list[_Element] = [child for child in root if isinstance(child.tag, str)]
 
     chunks: list[ChunkData] = []
-    current: list[Any] = []
+    current: list[_Element] = []
     current_words = 0
 
     def flush() -> None:
