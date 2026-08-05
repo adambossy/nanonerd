@@ -31,6 +31,15 @@ export function useReadTracking(
       setReadIds((prev) => new Set(prev).add(chunkId));
     };
 
+    const dwellSatisfied = (chunkId: number) => {
+      const firstSeen = firstVisibleAt.get(chunkId);
+      const minDwellMs =
+        ((wordCounts.get(chunkId) ?? 0) / WORDS_PER_SECOND_CAP) * 1000;
+      return (
+        firstSeen !== undefined && performance.now() - firstSeen >= minDwellMs
+      );
+    };
+
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const chunkId = Number((entry.target as HTMLElement).dataset.chunkId);
@@ -45,14 +54,7 @@ export function useReadTracking(
           }
         } else if (entry.boundingClientRect.bottom <= 0) {
           // Condition 1: chunk has fully scrolled past the top of the viewport.
-          const firstSeen = firstVisibleAt.get(chunkId);
-          const minDwellMs =
-            ((wordCounts.get(chunkId) ?? 0) / WORDS_PER_SECOND_CAP) * 1000;
-          // Condition 2: enough time has passed to have plausibly read it.
-          if (
-            firstSeen !== undefined &&
-            performance.now() - firstSeen >= minDwellMs
-          ) {
+          if (dwellSatisfied(chunkId)) {
             markRead(chunkId);
           }
         }
@@ -62,10 +64,32 @@ export function useReadTracking(
       .querySelectorAll("[data-chunk-id]")
       .forEach((el) => observer.observe(el));
 
+    // The final chunk of an article can never scroll past the viewport top
+    // (its bottom stays in view at max scroll), so it can never satisfy the
+    // exit-past-top rule above. When the user has scrolled to the very
+    // bottom of the document, mark any visible chunk read once its dwell
+    // time has elapsed.
+    const tryMarkAtBottom = () => {
+      const atBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 4;
+      if (!atBottom) return;
+      document.querySelectorAll("[data-chunk-id]").forEach((el) => {
+        const chunkId = Number((el as HTMLElement).dataset.chunkId);
+        if (Number.isNaN(chunkId)) return;
+        if (el.getBoundingClientRect().top >= window.innerHeight) return;
+        if (dwellSatisfied(chunkId)) {
+          markRead(chunkId);
+        }
+      });
+    };
+    window.addEventListener("scroll", tryMarkAtBottom, { passive: true });
+
     const requeue = (ids: number[]) => {
       ids.forEach((id) => pending.add(id));
     };
     const flush = () => {
+      tryMarkAtBottom();
       if (pending.size === 0) return;
       const ids = [...pending];
       pending.clear();
@@ -88,6 +112,7 @@ export function useReadTracking(
     return () => {
       observer.disconnect();
       clearInterval(timer);
+      window.removeEventListener("scroll", tryMarkAtBottom);
       window.removeEventListener("pagehide", flushWithBeacon);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
