@@ -1,0 +1,525 @@
+<meta charset="utf-8">
+<title>Mastery Atlas · V4 Canvas Zoom — Mathematical Foundations</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body { background: #f9f9f7; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) body { background: #0d0d0d; }
+  }
+  :root[data-theme="dark"] body { background: #0d0d0d; }
+  :root[data-theme="light"] body { background: #f9f9f7; }
+  canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+  #hint {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: #f2f2f0;
+    background: rgba(12, 12, 11, 0.78);
+    border-radius: 999px;
+    padding: 7px 14px;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 600ms ease;
+    white-space: nowrap;
+  }
+  #hint.off { opacity: 0; }
+</style>
+
+<canvas id="cv"></canvas>
+<div id="hint">pinch or scroll to zoom · click to dive · esc to rise</div>
+
+<script>
+/* ── Subject: Mathematical Foundations (from the LLM atlas) ───────── */
+const AREA = { name: "Mathematical Foundations", p: [0.95, 88, 10], subs: [
+  ["Linear Algebra", ["Vectors & matrices", "Matrix multiplication", "Eigenvalues & eigenvectors", "SVD & low-rank approximation", "Norms & inner products"]],
+  ["Probability Theory", ["Random variables", "Common distributions", "Conditional probability & Bayes", "Expectation & variance", "Sampling methods"]],
+  ["Information Theory", ["Entropy", "Cross-entropy", "KL divergence", "Mutual information", "Perplexity as compression"]],
+  ["Calculus for Optimization", ["Partial derivatives & gradients", "The chain rule", "Jacobians & Hessians", "Taylor expansions", "Convexity & saddle points"]],
+  ["Numerical Methods", ["Floating-point precision", "Log-sum-exp & stability tricks", "Vectorized computation", "Numerical gradient checking"]],
+]};
+
+/* Same deterministic quiz history as the other variants. */
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gauss(rng) {
+  return Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
+}
+function leafScore(path, prof) {
+  const rng = mulberry32(hashStr(path));
+  if (rng() > prof[0]) return null;
+  return Math.max(4, Math.min(100, Math.round(prof[1] + gauss(rng) * prof[2])));
+}
+const BANDS = [
+  { id: "top",  label: "Mastered",      test: s => s >= 90 },
+  { id: "hi",   label: "Solid",         test: s => s >= 75 },
+  { id: "mid",  label: "Partial",       test: s => s >= 60 },
+  { id: "f1",   label: "Failed",        test: s => s >= 40 },
+  { id: "f2",   label: "Failed badly",  test: () => true },
+];
+const band = s => s == null ? "none" : BANDS.find(b => b.test(s)).id;
+
+/* ── Tree: arbitrary depth. Level 4 is synthesized facet curricula —
+   in the real tool an LLM fragments each node on demand, to any depth. ── */
+const FACET_POOL = [
+  "Core intuition", "Formal definition", "Key properties", "Worked examples",
+  "Common pitfalls", "Implementation in code", "Connections & applications", "Practice problems",
+];
+function facetsFor(path, parentScore) {
+  const rng = mulberry32(hashStr(path + "/facets"));
+  const count = 4 + Math.floor(rng() * 3);
+  const start = Math.floor(rng() * FACET_POOL.length);
+  return Array.from({ length: count }, (_, k) => {
+    const name = FACET_POOL[(start + k) % FACET_POOL.length];
+    let score = null;
+    if (parentScore != null) {
+      const g = gauss(rng);
+      score = rng() < 0.1 ? null : Math.max(4, Math.min(100, Math.round(parentScore + g * 8)));
+    }
+    return { name, score, children: null };
+  });
+}
+
+const root = {
+  name: AREA.name, score: null,
+  children: AREA.subs.map(s => ({
+    name: s[0], score: null,
+    children: s[1].map(lf => {
+      const path = `${AREA.name}/${s[0]}/${lf}`;
+      const sc = leafScore(path, AREA.p);
+      return { name: lf, score: sc, children: facetsFor(path, sc) };
+    }),
+  })),
+};
+
+/* annotate: depth, parent, frontier rollup */
+(function annotate(node, parent, depth) {
+  node.parent = parent; node.depth = depth;
+  if (node.children && node.children.length) {
+    node.children.forEach(c => annotate(c, node, depth + 1));
+    node.frontier = node.children.flatMap(c => c.frontier);
+  } else {
+    node.children = null;
+    node.frontier = [node];
+  }
+  node.attempted = node.frontier.filter(f => f.score != null).length;
+  node.pct = Math.round(node.frontier.reduce((a, f) => a + (f.score || 0), 0) / node.frontier.length);
+})(root, null, 0);
+
+function nodeBand(node) {
+  if (!node.children) return band(node.score);
+  return node.attempted === 0 ? "none" : band(node.pct);
+}
+function nodeSub(node) {
+  if (!node.children) {
+    if (node.score == null) return "not attempted";
+    return `${BANDS.find(b => b.test(node.score)).label} · ${node.score}/100`;
+  }
+  return `${node.attempted}/${node.frontier.length} · ${node.pct}%`;
+}
+
+/* ── Recursive layout: each node subdivides its rect into a quantized
+   grid for its children. Same rule at every depth — no 3-level cap. ── */
+(function layout(node) {
+  if (!node.children) return;
+  const { x, y, w, h } = node.rect;
+  const n = node.children.length;
+  const C = Math.min(n, Math.max(1, Math.round(Math.sqrt(n * w / h))));
+  const R = Math.ceil(n / C);
+  const cellW = w / C, cellH = h / R;
+  const gap = Math.min(cellW, cellH) * 0.10;
+  node.grid = { C, R, cellW, cellH, gap };
+  node.children.forEach((ch, i) => {
+    ch.rect = {
+      x: x + (i % C) * cellW + gap / 2,
+      y: y + Math.floor(i / C) * cellH + gap / 2,
+      w: cellW - gap, h: cellH - gap,
+    };
+    layout(ch);
+  });
+  node.spares = [];
+  for (let i = n; i < C * R; i++) {
+    node.spares.push({
+      x: x + (i % C) * cellW + gap / 2,
+      y: y + Math.floor(i / C) * cellH + gap / 2,
+      w: cellW - gap, h: cellH - gap,
+    });
+  }
+})((root.rect = (() => {
+  const n = root.children.length;
+  const C = Math.ceil(Math.sqrt(n)), R = Math.ceil(n / C);
+  return { x: 0, y: 0, w: C * 1000, h: R * 1000 };
+})(), root));
+
+/* ── Theme ────────────────────────────────────────────────────────── */
+const PAL = {
+  light: {
+    page: "#f9f9f7", ring: "rgba(11,11,11,0.07)", wash: "rgba(11,11,11,0.10)",
+    hairline: "#c9c8c0",
+    none: "#9fbede", f2: "#8a1a10", f1: "#bf3f28", mid: "#b47300", hi: "#5fae42", top: "#2ecf4e",
+  },
+  dark: {
+    page: "#0d0d0d", ring: "rgba(0,0,0,0.35)", wash: "rgba(255,255,255,0.16)",
+    hairline: "#3a3a37",
+    none: "#3d5a82", f2: "#b5321c", f1: "#dd5a35", mid: "#d68d00", hi: "#7ccf52", top: "#58ee7c",
+  },
+};
+function themeMode() {
+  const t = document.documentElement.dataset.theme;
+  if (t === "dark" || t === "light") return t;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+let TH = PAL[themeMode()];
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { TH = PAL[themeMode()]; });
+new MutationObserver(() => { TH = PAL[themeMode()]; })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+/* ── Canvas & camera ──────────────────────────────────────────────── */
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let dpr = 1, vw = 0, vh = 0;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  vw = window.innerWidth; vh = window.innerHeight;
+  cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
+}
+window.addEventListener("resize", () => { resize(); goal = fitBounds(focusNode.rect); });
+resize();
+
+const cam = { k: 1, tx: 0, ty: 0 };
+let goal = null;
+let focusNode = root;
+const s2w = (sx, sy) => ({ x: (sx - cam.tx) / cam.k, y: (sy - cam.ty) / cam.k });
+
+function fitBounds(b) {
+  const pad = 0.06;
+  const k = Math.min(vw / (b.w * (1 + 2 * pad)), vh / (b.h * (1 + 2 * pad)));
+  return { k, tx: vw / 2 - k * (b.x + b.w / 2), ty: vh / 2 - k * (b.y + b.h / 2) };
+}
+const KMIN = () => fitBounds(root.rect).k * 0.5;
+const KMAX = () => fitBounds({ x: 0, y: 0, w: 60, h: 60 }).k * 1.5;
+
+/* Descend one grid step toward the point; null if outside / spare slot. */
+function stepInto(node, p) {
+  if (!node.children) return null;
+  const g = node.grid;
+  const ci = Math.floor((p.x - node.rect.x) / g.cellW);
+  const ri = Math.floor((p.y - node.rect.y) / g.cellH);
+  if (ci < 0 || ci >= g.C || ri < 0 || ri >= g.R) return null;
+  const idx = ri * g.C + ci;
+  return idx < node.children.length ? node.children[idx] : null;
+}
+/* Node containing p at exactly targetDepth (or the deepest frontier above it). */
+function nodeAt(p, targetDepth) {
+  let node = root;
+  if (p.x < root.rect.x || p.y < root.rect.y ||
+      p.x > root.rect.x + root.rect.w || p.y > root.rect.y + root.rect.h) return null;
+  while (node.depth < targetDepth) {
+    const next = stepInto(node, p);
+    if (!next) return node.children ? null : node;
+    node = next;
+  }
+  return node;
+}
+function isAncestorOrSelf(a, node) {
+  for (let n = node; n; n = n.parent) if (n === a) return true;
+  return false;
+}
+
+function setFocus(node) {
+  focusNode = node;
+  goal = fitBounds(node.rect);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    Object.assign(cam, goal); goal = null;
+  }
+}
+
+/* ── Snapping: nearest level by scale, biased by gesture direction.
+   `projectedK` carries gesture momentum — the level is chosen from where
+   the zoom was HEADED, not where the fingers stopped. ── */
+let gestureK0 = null;
+function doSnap(projectedK = cam.k) {
+  const ratio = gestureK0 ? projectedK / gestureK0 : 1;
+  gestureK0 = null;
+  const c = s2w(vw / 2, vh / 2);
+  /* candidate chain: root → … → deepest node under the viewport center */
+  const chain = [root];
+  let n = root;
+  while (true) {
+    const next = stepInto(n, c);
+    if (!next) break;
+    chain.push(n = next);
+  }
+  let best = chain[0], bd = Infinity;
+  for (const cand of chain) {
+    const d = Math.abs(Math.log(projectedK / fitBounds(cand.rect).k));
+    if (d < bd) { bd = d; best = cand; }
+  }
+  /* a subtle pinch should still change level: if we'd snap back to where
+     we already are, honor the gesture's direction instead */
+  if (best === focusNode) {
+    if (ratio < 0.92 && focusNode.parent) best = focusNode.parent;
+    else if (ratio > 1.09) {
+      const child = chain.find(cand => cand.depth === focusNode.depth + 1) ||
+        stepInto(focusNode, c);
+      if (child) best = child;
+    }
+  }
+  setFocus(best);
+}
+
+/* ── Input ────────────────────────────────────────────────────────── */
+const hint = document.getElementById("hint");
+let hintTimer = setTimeout(() => hint.classList.add("off"), 5000);
+function dismissHint() { hint.classList.add("off"); clearTimeout(hintTimer); }
+
+let snapTimer = null;
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  dismissHint();
+  goal = null;
+  if (gestureK0 == null) gestureK0 = cam.k;
+  const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.014 : 0.002));
+  const k2 = Math.min(KMAX(), Math.max(KMIN(), cam.k * factor));
+  cam.tx = e.clientX - (e.clientX - cam.tx) * (k2 / cam.k);
+  cam.ty = e.clientY - (e.clientY - cam.ty) * (k2 / cam.k);
+  cam.k = k2;
+  clearTimeout(snapTimer);
+  snapTimer = setTimeout(doSnap, 200);
+}, { passive: false });
+
+const pointers = new Map();
+let downPos = null, dragged = false, pinchStart = null;
+let zoomVel = 0, lastPinchT = 0, postPinch = false;
+cv.addEventListener("pointerdown", e => {
+  dismissHint();
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) { downPos = { x: e.clientX, y: e.clientY }; dragged = false; postPinch = false; }
+  else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinchStart = { d: Math.hypot(a.x - b.x, a.y - b.y), k: cam.k };
+    gestureK0 = cam.k;
+    zoomVel = 0;
+    lastPinchT = performance.now();
+  }
+});
+cv.addEventListener("pointermove", e => {
+  if (!pointers.has(e.pointerId)) {
+    hoverPoint = { x: e.clientX, y: e.clientY };
+    const h = nodeAt(s2w(hoverPoint.x, hoverPoint.y), focusNode.depth + 1);
+    cv.style.cursor = h && h !== focusNode ? "pointer" : "default";
+    return;
+  }
+  const prev = pointers.get(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) {
+    if (postPinch) return; /* the finger left over from a pinch must not pan */
+    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+    if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 5) dragged = true;
+    if (dragged) { goal = null; cam.tx += dx; cam.ty += dy; }
+  } else if (pointers.size === 2 && pinchStart) {
+    goal = null;
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    /* amplified: a subtle pinch travels a full level */
+    const k2 = Math.min(KMAX(), Math.max(KMIN(), pinchStart.k * Math.pow(d / pinchStart.d, 1.7)));
+    const now = performance.now();
+    const dt = Math.max(1, now - lastPinchT);
+    lastPinchT = now;
+    zoomVel = 0.7 * zoomVel + 0.3 * (Math.log(k2 / cam.k) / dt); /* log-scale per ms */
+    cam.tx = mx - (mx - cam.tx) * (k2 / cam.k);
+    cam.ty = my - (my - cam.ty) * (k2 / cam.k);
+    cam.k = k2;
+  }
+});
+function pointerEnd(e) {
+  const wasPinch = pointers.size === 2;
+  pointers.delete(e.pointerId);
+  if (wasPinch && pointers.size < 2) {
+    pinchStart = null;
+    postPinch = true; /* swallow the leftover finger's pan and its lift-click */
+    /* carry the gesture's momentum into the snap: project ~260ms of glide
+       so the zoom flows straight through the release into the level fit */
+    const projected = Math.min(KMAX(), Math.max(KMIN(), cam.k * Math.exp(zoomVel * 260)));
+    doSnap(projected);
+    return;
+  }
+  if (pointers.size === 0 && downPos && !dragged && !postPinch) click(e.clientX, e.clientY);
+  if (pointers.size === 0) { downPos = null; postPinch = false; }
+}
+cv.addEventListener("pointerup", pointerEnd);
+cv.addEventListener("pointercancel", e => { pointers.delete(e.pointerId); pinchStart = null; });
+
+function click(sx, sy) {
+  const target = nodeAt(s2w(sx, sy), focusNode.depth + 1);
+  if (!target || target === focusNode) { if (focusNode.parent) setFocus(focusNode.parent); return; }
+  setFocus(target);
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { dismissHint(); if (focusNode.parent) setFocus(focusNode.parent); }
+});
+
+let hoverPoint = null;
+cv.addEventListener("pointerleave", () => { hoverPoint = null; });
+
+/* ── Drawing ──────────────────────────────────────────────────────── */
+function wrapLines(text, maxW, font) {
+  ctx.font = font;
+  const words = text.split(" ");
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const t = line ? line + " " + w : w;
+    if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; }
+    else line = t;
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, 3);
+}
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
+}
+function drawChip(x, y, title, sub) {
+  const f1 = "650 13px system-ui, sans-serif";
+  const f2 = "500 11px ui-monospace, Menlo, monospace";
+  ctx.font = f1;
+  const w1 = ctx.measureText(title).width;
+  ctx.font = f2;
+  const w2 = ctx.measureText(sub).width;
+  const pad = 10, gap = 8, h = 26;
+  const w = pad + w1 + gap + w2 + pad;
+  ctx.fillStyle = "rgba(12,12,11,0.78)";
+  rr(x, y, w, h, 13);
+  ctx.fill();
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.font = f1;
+  ctx.fillText(title, x + pad, y + h / 2 + 0.5);
+  ctx.fillStyle = "#c9c8c0";
+  ctx.font = f2;
+  ctx.fillText(sub, x + pad + w1 + gap, y + h / 2 + 0.5);
+}
+
+const scr = b => ({ x: b.x * cam.k + cam.tx, y: b.y * cam.k + cam.ty, w: b.w * cam.k, h: b.h * cam.k });
+
+function nodeAlpha(node) {
+  if (focusNode === root) return 1;
+  return isAncestorOrSelf(focusNode, node) || isAncestorOrSelf(node, focusNode) ? 1 : 0.25;
+}
+
+/* Every lattice is visible from the top, recursively, as deep as data
+   exists — zooming only magnifies. The only gate is level-of-detail:
+   children draw once the node has the pixels for them. */
+function drawNode(node) {
+  const s = scr(node.rect);
+  if (s.x > vw + 60 || s.y > vh + 60 || s.x + s.w < -60 || s.y + s.h < -60) return;
+  const expand = node.children && s.w > 24;
+  const r = Math.max(2, Math.min(10, s.w * 0.03));
+
+  if (!expand) {
+    ctx.globalAlpha = nodeAlpha(node);
+    ctx.fillStyle = TH[nodeBand(node)];
+    rr(s.x, s.y, s.w, s.h, r);
+    ctx.fill();
+    ctx.strokeStyle = TH.ring;
+    ctx.lineWidth = 1;
+    rr(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1, r);
+    ctx.stroke();
+
+    /* semantic labels: appear as the node earns the pixels */
+    if (s.w > 220) {
+      ctx.globalAlpha = Math.min(1, (s.w - 220) / 140) * nodeAlpha(node);
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 5;
+      const fs = Math.max(13, Math.min(26, s.w * 0.075));
+      const font = `650 ${fs}px system-ui, sans-serif`;
+      const lines = wrapLines(node.name, s.w - 30, font);
+      ctx.font = font;
+      ctx.textBaseline = "alphabetic";
+      lines.forEach((ln, i) => ctx.fillText(ln, s.x + 14, s.y + 14 + fs * (i + 0.9)));
+      ctx.font = `500 ${Math.max(11, fs * 0.62)}px ui-monospace, Menlo, monospace`;
+      ctx.fillText(nodeSub(node), s.x + 14, s.y + 14 + fs * (lines.length + 1.1));
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  for (const ch of node.children) drawNode(ch);
+
+  if (node.spares.length && s.w > 60) {
+    ctx.globalAlpha = nodeAlpha(node);
+    ctx.strokeStyle = TH.hairline;
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1;
+    for (const sp of node.spares) {
+      const q = scr(sp);
+      rr(q.x, q.y, q.w, q.h, r);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function draw() {
+  if (goal) {
+    cam.k += (goal.k - cam.k) * 0.16;
+    cam.tx += (goal.tx - cam.tx) * 0.16;
+    cam.ty += (goal.ty - cam.ty) * 0.16;
+    if (Math.abs(Math.log(cam.k / goal.k)) < 0.001 &&
+        Math.hypot(cam.tx - goal.tx, cam.ty - goal.ty) < 0.5) {
+      Object.assign(cam, goal);
+      goal = null;
+    }
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = TH.page;
+  ctx.fillRect(0, 0, vw, vh);
+
+  drawNode(root);
+
+  /* hover: wash the whole region — cells AND the gaps between them */
+  const hov = hoverPoint && pointers.size === 0
+    ? nodeAt(s2w(hoverPoint.x, hoverPoint.y), focusNode.depth + 1) : null;
+  if (hov && hov !== focusNode) {
+    const s = scr(hov.rect);
+    ctx.fillStyle = TH.wash;
+    rr(s.x - 4, s.y - 4, s.w + 8, s.h + 8, Math.max(4, s.w * 0.02));
+    ctx.fill();
+    drawChip(Math.max(10, s.x + 6), Math.max(10, s.y - 36 < 10 ? s.y + 6 : s.y - 36),
+      hov.name, nodeSub(hov));
+  }
+
+  /* the focused node keeps its chip floated above */
+  if (focusNode !== root) {
+    const s = scr(focusNode.rect);
+    drawChip(Math.max(10, s.x + 2), Math.max(10, s.y - 36 < 10 ? s.y + 8 : s.y - 36),
+      focusNode.name, nodeSub(focusNode));
+  }
+
+  requestAnimationFrame(draw);
+}
+
+Object.assign(cam, fitBounds(root.rect));
+requestAnimationFrame(draw);
+</script>
