@@ -5,30 +5,24 @@ def para(words, prefix="w"):
     return "<p>" + " ".join(f"{prefix}{i}" for i in range(words)) + "</p>"
 
 
-def test_chunk_html_groups_small_paragraphs_greedily():
-    input_html = para(100, "a") + para(100, "b") + para(100, "c") + para(100, "d")
+def test_chunk_html_one_chunk_per_paragraph():
+    input_html = para(100, "a") + para(100, "b") + para(100, "c") + para(20, "d")
     output = chunk_html(input_html)
-    expected_output = [300, 100]
+    expected_output = [100, 100, 100, 20]
     assert [c.word_count for c in output] == expected_output
 
 
-def test_chunk_html_heading_starts_new_chunk():
+def test_chunk_html_heading_is_its_own_chunk():
     input_html = para(160, "a") + "<h2>Section Two</h2>" + para(160, "b")
     output = chunk_html(input_html)
-    assert [c.word_count for c in output] == [160, 162]
+    assert [c.word_count for c in output] == [160, 2, 160]
     assert output[1].html.startswith("<h2")
 
 
-def test_chunk_html_never_splits_a_paragraph():
+def test_chunk_html_long_paragraph_stays_whole():
     input_html = para(500)
     output = chunk_html(input_html)
     assert [c.word_count for c in output] == [500]
-
-
-def test_chunk_html_keeps_short_trailing_chunk():
-    input_html = para(300, "a") + para(20, "b")
-    output = chunk_html(input_html)
-    assert [c.word_count for c in output] == [300, 20]
 
 
 def test_html_to_text_strips_markup():

@@ -60,10 +60,11 @@ common tracking params (`utm_*`, `fbclid`, `gclid`), strip trailing slash.
 
 ## Chunking
 
-Extracted HTML is split on block elements, then greedily grouped into chunks
-of ~150–300 words. A paragraph is never split across chunks; headings always
-start a new chunk. Each chunk renders as `<section data-chunk-id>` in the
-reader.
+Extracted HTML is split on block elements, and every block element
+(paragraph, heading, blockquote, ...) becomes its own chunk — one chunk per
+paragraph, matching the intuitive reading unit. (Originally chunks were
+greedily grouped to ~150–300 words; changed by user decision on 2026-08-05.)
+Each chunk renders as `<section data-chunk-id>` in the reader.
 
 ## Read tracking
 
