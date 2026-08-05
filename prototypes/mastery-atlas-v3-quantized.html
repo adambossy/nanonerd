@@ -1,0 +1,793 @@
+<meta charset="utf-8">
+<title>LLM Mastery Atlas · V3 Quantized Lattice</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #898781;
+    --hairline: #e1e0d9;
+    --ring: rgba(11, 11, 11, 0.10);
+    --cell-ring: rgba(11, 11, 11, 0.07);
+    --wash: rgba(11, 11, 11, 0.10);
+    --c-none: #9fbede;
+    --c-f2: #8a1a10;
+    --c-f1: #bf3f28;
+    --c-mid: #b47300;
+    --c-hi: #5fae42;
+    --c-top: #2ecf4e;
+    --chip-bg: #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --ink-3: #898781;
+      --hairline: #2c2c2a;
+      --ring: rgba(255, 255, 255, 0.10);
+      --cell-ring: rgba(0, 0, 0, 0.35);
+      --wash: rgba(255, 255, 255, 0.18);
+      --c-none: #3d5a82;
+      --c-f2: #b5321c;
+      --c-f1: #dd5a35;
+      --c-mid: #d68d00;
+      --c-hi: #7ccf52;
+      --c-top: #58ee7c;
+      --chip-bg: #262624;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-3: #898781;
+    --hairline: #2c2c2a;
+    --ring: rgba(255, 255, 255, 0.10);
+    --cell-ring: rgba(0, 0, 0, 0.35);
+    --wash: rgba(255, 255, 255, 0.18);
+    --c-none: #3d5a82;
+    --c-f2: #b5321c;
+    --c-f1: #dd5a35;
+    --c-mid: #d68d00;
+    --c-hi: #7ccf52;
+    --c-top: #58ee7c;
+    --chip-bg: #262624;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #898781;
+    --hairline: #e1e0d9;
+    --ring: rgba(11, 11, 11, 0.10);
+    --cell-ring: rgba(11, 11, 11, 0.07);
+    --wash: rgba(11, 11, 11, 0.10);
+    --c-none: #9fbede;
+    --c-f2: #8a1a10;
+    --c-f1: #bf3f28;
+    --c-mid: #b47300;
+    --c-hi: #5fae42;
+    --c-top: #2ecf4e;
+    --chip-bg: #f0efec;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 64px; }
+
+  header.masthead {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px 48px;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 40px 0 22px;
+  }
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(26px, 4vw, 38px);
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .subject { color: var(--ink-2); margin: 0; max-width: 52ch; }
+  .subject strong { color: var(--ink); font-weight: 600; }
+
+  .scoreboard { min-width: 300px; flex: 0 1 360px; }
+  .hero-num { font-size: 44px; font-weight: 750; letter-spacing: -0.02em; line-height: 1; }
+  .hero-num small { font-size: 15px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; margin-left: 8px; }
+  .distbar {
+    display: flex;
+    height: 12px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 12px 0 10px;
+    box-shadow: inset 0 0 0 1px var(--cell-ring);
+  }
+  .distbar span { display: block; height: 100%; }
+  .distbar span + span { margin-left: 2px; }
+  .substats {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .legend .key { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--cell-ring); }
+  .legend .hint { margin-left: auto; color: var(--ink-3); }
+
+  nav.crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    padding: 18px 0 16px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  .crumbs button { all: unset; cursor: pointer; color: var(--ink-2); padding: 2px 4px; border-radius: 4px; }
+  .crumbs button:hover { color: var(--ink); background: var(--chip-bg); }
+  .crumbs button:focus-visible { outline: 2px solid var(--c-none); outline-offset: 1px; }
+  .crumbs .here { color: var(--ink); font-weight: 600; padding: 2px 4px; }
+  .crumbs .sep { color: var(--ink-3); }
+  .crumbs .uphint { margin-left: auto; color: var(--ink-3); font-size: 11px; }
+
+  #atlas {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 12px 12px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    width: 100%;
+  }
+  button.card { cursor: pointer; transition: border-color 120ms ease; }
+  button.card:hover { border-color: var(--ink-3); }
+  button.card:focus-visible { outline: 2px solid var(--c-none); outline-offset: 2px; }
+
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .card-title { font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+  .chip {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+  }
+
+  /* ── Mosaic: one shared lattice, one cell per leaf ── */
+  .mosaic {
+    position: relative;
+    display: grid;
+    gap: 2px;
+    flex: 1;
+    aspect-ratio: 1;
+  }
+  .cell {
+    border-radius: 1.5px;
+    box-shadow: inset 0 0 0 1px var(--cell-ring);
+    min-width: 0;
+    min-height: 0;
+  }
+  .cell.hl { box-shadow: inset 0 0 0 1px var(--cell-ring), inset 0 0 0 999px var(--wash); }
+  .spare { border: 1px dashed var(--hairline); border-radius: 2px; margin: 1px; }
+
+  .bigwrap { grid-column: 1 / -1; display: flex; justify-content: center; }
+  .mosaic-big {
+    flex: none;
+    width: min(100%, calc(100dvh - 210px));
+    min-width: 280px;
+    gap: 4px;
+  }
+  .mosaic-big .cell { cursor: pointer; border-radius: 3px; }
+  .mosaic-big .cell:focus-visible { outline: 2px solid var(--c-none); outline-offset: -1px; }
+
+  .blabel {
+    position: absolute;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    max-width: calc(100% - 16px);
+    color: #fff;
+    font-size: 13.5px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+  }
+  .blabel[hidden] { display: none; }
+  .blabel .bchip, .bchip {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: #f2f2f0;
+    background: rgba(12, 12, 11, 0.78);
+    border-radius: 999px;
+    padding: 3px 9px;
+    text-shadow: none;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .leafbig {
+    grid-column: 1 / -1;
+    width: min(100%, calc(100dvh - 210px));
+    margin-inline: auto;
+    display: grid;
+    gap: 6px;
+  }
+  .leafcell {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--cell-ring);
+  }
+  .leafcell .blabel { top: 10px; left: 10px; }
+
+  #tip {
+    position: fixed;
+    z-index: 10;
+    pointer-events: none;
+    background: var(--ink);
+    color: var(--page);
+    border-radius: 6px;
+    padding: 8px 11px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    max-width: 320px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    display: none;
+  }
+  #tip .tpath { opacity: 0.65; font-size: 11px; margin-bottom: 2px; }
+  #tip .tname { font-weight: 650; }
+  #tip .tstate {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #tip .tstate i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+  .notes {
+    margin-top: 44px;
+    padding-top: 20px;
+    border-top: 1px solid var(--hairline);
+    display: grid;
+    gap: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .notes h3 {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+  .notes p { margin: 0; color: var(--ink-2); font-size: 13.5px; max-width: 44ch; }
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Nanonerd · Curriculum Prototype · V3 Quantized Lattice</p>
+      <h1>Mastery Atlas</h1>
+      <p class="subject"><strong>Large Language Models</strong> — a recursively
+        generated curriculum, three levels deep. Every square is a leaf, colored
+        by your latest quiz against its rubric.</p>
+    </div>
+    <div class="scoreboard">
+      <div class="hero-num"><span id="heroPct">–</span><small>of the atlas colored green</small></div>
+      <div class="distbar" id="distbar" role="img" aria-label="Distribution of mastery bands"></div>
+      <div class="substats" id="substats"></div>
+    </div>
+  </header>
+
+  <div class="legend" id="legend"></div>
+
+  <nav class="crumbs" id="crumbs" aria-label="Curriculum path"></nav>
+
+  <main id="atlas"></main>
+
+  <footer class="notes">
+    <div>
+      <h3>The recursion</h3>
+      <p>Each of the 16 areas fragments into its own curriculum, and each of
+        those into leaves. Click to zoom in — the tile magnifies in place;
+        press <span class="mono">Esc</span> to zoom back out.</p>
+    </div>
+    <div>
+      <h3>The colors</h3>
+      <p>Mastery is measured per leaf by a generated quiz with a rubric.
+        Greens brighten as scores approach 100; yellow is partial; reds deepen
+        with how badly a quiz went; blue is untouched territory.</p>
+    </div>
+    <div>
+      <h3>This variant</h3>
+      <p>Every leaf is exactly one lattice cell. Topic regions tile the same
+        shared grid in reading order, so sizes stay proportional and every
+        seam aligns; hover to reveal a topic's region.</p>
+    </div>
+  </footer>
+</div>
+
+<div id="tip" role="presentation"></div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────
+   Curriculum: Large Language Models, 3 levels.
+   AREAS → topics → leaves.
+   `p` = simulated learner profile [attemptProbability, meanScore, sd];
+   topics may override the area profile to tell a sharper story.
+──────────────────────────────────────────────────────────────────── */
+const AREAS = [
+  { name: "Mathematical Foundations", p: [0.95, 88, 10], subs: [
+    ["Linear Algebra", ["Vectors & matrices", "Matrix multiplication", "Eigenvalues & eigenvectors", "SVD & low-rank approximation", "Norms & inner products"]],
+    ["Probability Theory", ["Random variables", "Common distributions", "Conditional probability & Bayes", "Expectation & variance", "Sampling methods"]],
+    ["Information Theory", ["Entropy", "Cross-entropy", "KL divergence", "Mutual information", "Perplexity as compression"]],
+    ["Calculus for Optimization", ["Partial derivatives & gradients", "The chain rule", "Jacobians & Hessians", "Taylor expansions", "Convexity & saddle points"]],
+    ["Numerical Methods", ["Floating-point precision", "Log-sum-exp & stability tricks", "Vectorized computation", "Numerical gradient checking"]],
+  ]},
+  { name: "Neural Network Fundamentals", p: [1.0, 91, 8], subs: [
+    ["Feedforward Networks", ["The perceptron", "MLPs & universal approximation", "Activation functions", "Output layers & softmax"]],
+    ["Backpropagation", ["Computational graphs", "Reverse-mode autodiff", "Gradient flow & vanishing gradients", "Implementing backprop by hand"]],
+    ["Optimization Algorithms", ["SGD & momentum", "Adam & AdamW", "Learning-rate schedules", "Warmup & decay", "Gradient clipping"]],
+    ["Regularization", ["Weight decay", "Dropout", "Early stopping", "Label smoothing", "Data augmentation"]],
+    ["Normalization", ["BatchNorm", "LayerNorm", "RMSNorm", "Pre-norm vs post-norm"]],
+    ["Embeddings", ["One-hot vs dense vectors", "word2vec & GloVe", "Embedding arithmetic", "Contextual vs static embeddings"]],
+  ]},
+  { name: "Tokenization", p: [0.8, 78, 14], subs: [
+    ["Subword Algorithms", ["Byte-pair encoding", "WordPiece", "Unigram LM tokenization", "SentencePiece"]],
+    ["Byte & Character Level", ["Byte-level BPE", "Character-level models", "Tokenizer-free approaches"]],
+    ["Vocabulary Design", ["Vocabulary size trade-offs", "Special tokens", "Multilingual vocabularies", "Domain-specific vocabularies"]],
+    ["Practical Issues", ["Tokenizing numbers & code", "Whitespace handling", "Glitch tokens", "Fertility & compression rates"]],
+  ]},
+  { name: "Transformer Architecture", p: [1.0, 94, 6], subs: [
+    ["Attention Mechanism", ["Queries, keys & values", "Scaled dot-product attention", "Attention as soft lookup", "Attention weight visualization"]],
+    ["Multi-Head Attention", ["Head projections", "Why multiple heads help", "Head specialization", "Concatenation & output projection"]],
+    ["Positional Information", ["Sinusoidal encodings", "Learned positions", "Rotary embeddings (RoPE)", "ALiBi"]],
+    ["Transformer Blocks", ["Feed-forward sublayer", "Residual connections", "LayerNorm placement", "Parameter counting"]],
+    ["Architectural Variants", ["Encoder–decoder", "Decoder-only", "Encoder-only (BERT-style)", "Causal masking mechanics"]],
+    ["The KV Cache", ["Why caching works", "Memory footprint math", "Cache reuse across turns"]],
+  ]},
+  { name: "Efficient Attention & Long Context", p: [0.5, 70, 16], subs: [
+    ["Sub-quadratic Attention", ["Sparse attention patterns", "Linear attention", "Low-rank approximations", "Sliding-window attention"]],
+    ["Hardware-Aware Kernels", ["FlashAttention", "Memory hierarchy & IO-awareness", "Kernel fusion"]],
+    ["Reduced-KV Methods", ["Multi-query attention", "Grouped-query attention", "KV-cache compression"]],
+    ["Context Extension", ["Position interpolation", "YaRN & NTK scaling", "Length-generalization failures", "Needle-in-a-haystack evals"]],
+    ["Alternative Architectures", ["State-space models (Mamba)", "RWKV", "Hybrid attention–SSM models"]],
+  ]},
+  { name: "Pretraining", p: [0.6, 66, 18], subs: [
+    ["Objectives", ["Causal language modeling", "Masked language modeling", "Span corruption", "Fill-in-the-middle"]],
+    ["Data Curation", ["Web-scale scraping", "Quality filtering", "Deduplication", "Contamination control", "Data mixtures & weighting"]],
+    ["Distributed Training", [0.9, 36, 12], ["Data parallelism", "Tensor parallelism", "Pipeline parallelism", "ZeRO & sharded optimizers", "Communication bottlenecks"]],
+    ["Training Dynamics", ["Loss curves & spikes", "Mixed-precision training", "Hyperparameter transfer (muP)", "Checkpointing & restarts"]],
+    ["Compute Infrastructure", ["GPU/TPU architecture basics", "Interconnects & topology", "Failure recovery at scale"]],
+  ]},
+  { name: "Scaling Laws", p: [0.55, 74, 15], subs: [
+    ["Foundational Results", ["Kaplan power laws", "Chinchilla compute-optimal scaling", "Data-constrained scaling"]],
+    ["Interpretation", ["What loss predicts", "Downstream-task transfer", "Extrapolation limits"]],
+    ["Emergence", ["Emergent-abilities claims", "Metric-choice critiques", "Grokking", "Phase transitions"]],
+    ["Practical Budgeting", ["Params-vs-tokens allocation", "Inference-aware scaling", "Overtraining small models"]],
+  ]},
+  { name: "Fine-tuning & Adaptation", p: [0.5, 68, 15], subs: [
+    ["Supervised Fine-tuning", ["Instruction tuning", "Dataset construction", "Chat templates & formatting", "Multi-task mixtures"]],
+    ["Parameter-Efficient Methods", ["LoRA", "QLoRA", "Adapters", "Prompt & prefix tuning", "Choosing rank & target modules"]],
+    ["Continued Pretraining", ["Domain adaptation", "Catastrophic forgetting", "Replay & regularization"]],
+    ["Model Surgery", ["Model merging", "Task vectors", "Distilling into smaller models"]],
+  ]},
+  { name: "Alignment", p: [0.3, 58, 18], subs: [
+    ["Preference Data", ["Human preference collection", "Annotator agreement", "Synthetic preferences (RLAIF)"]],
+    ["Reward Modeling", ["Bradley–Terry models", "Reward-model training", "Overoptimization & Goodharting"]],
+    ["Policy Optimization", [0.8, 34, 14], ["RLHF pipeline overview", "PPO for language models", "DPO", "KTO & other direct methods"]],
+    ["Constitutional Methods", ["Constitutional AI", "Self-critique loops", "Rule-based rewards"]],
+    ["Alignment Challenges", ["Reward hacking", "Sycophancy", "Refusal calibration", "Deceptive-alignment debates"]],
+  ]},
+  { name: "Prompting & In-Context Learning", p: [0.85, 84, 10], subs: [
+    ["Core Techniques", ["Zero-shot prompting", "Few-shot examples", "Role & system prompts", "Output formatting"]],
+    ["Reasoning Elicitation", ["Chain-of-thought", "Self-consistency", "Least-to-most prompting", "Tree-of-thought"]],
+    ["Why ICL Works", ["Induction heads", "Implicit Bayesian inference view", "Task vectors in context"]],
+    ["Robustness", ["Prompt sensitivity", "Ordering effects", "Prompt injection", "Jailbreak patterns"]],
+  ]},
+  { name: "Inference & Serving", p: [0.45, 66, 15], subs: [
+    ["Decoding Strategies", ["Greedy & beam search", "Temperature", "Top-k & nucleus sampling", "Repetition penalties", "Constrained decoding"]],
+    ["Speed Optimization", ["Speculative decoding", "Continuous batching", "Chunked prefill", "Prefix caching"]],
+    ["Memory Management", ["PagedAttention", "KV-cache budgets", "Offloading"]],
+    ["Serving Systems", ["Throughput vs latency", "Autoscaling", "Cost modeling", "Streaming APIs"]],
+  ]},
+  { name: "Model Compression", p: [0.2, 60, 18], subs: [
+    ["Quantization", ["Post-training quantization", "Quantization-aware training", "INT8 / INT4 formats", "GPTQ & AWQ", "Outlier features"]],
+    ["Pruning & Sparsity", ["Magnitude pruning", "Structured sparsity", "Lottery-ticket hypothesis"]],
+    ["Distillation", ["Teacher–student setup", "Logit vs feature distillation", "Synthetic-data distillation"]],
+    ["Mixture-of-Experts", ["Sparse routing", "Load balancing", "Expert parallelism", "Upcycling dense models"]],
+  ]},
+  { name: "Retrieval & RAG", p: [0.55, 72, 14], subs: [
+    ["Embedding Models", ["Contrastive training", "Bi-encoders vs cross-encoders", "Matryoshka embeddings"]],
+    ["Search Infrastructure", ["Vector indexes (HNSW, IVF)", "Hybrid lexical + dense search", "Reranking"]],
+    ["RAG Pipelines", ["Chunking strategies", "Query rewriting", "Context assembly", "Citation & grounding"]],
+    ["Evaluation & Failure", ["Retrieval metrics", "Faithfulness & hallucination", "Lost-in-the-middle", "Freshness & knowledge cutoffs"]],
+  ]},
+  { name: "Agents & Tool Use", p: [0.15, 62, 15], subs: [
+    ["Tool Calling", ["Function-calling formats", "Schema design", "Tool-result handling", "Parallel calls"]],
+    ["Agent Loops", ["ReAct", "Plan-and-execute", "Reflection & self-correction", "Stopping criteria"]],
+    ["Memory & State", ["Short-term scratchpads", "Long-term memory stores", "Context management"]],
+    ["Multi-Agent Systems", ["Orchestrator–worker patterns", "Debate & critique", "Communication protocols"]],
+    ["Agent Evaluation", ["Task benchmarks (SWE-bench…)", "Sandboxing", "Failure taxonomy"]],
+  ]},
+  { name: "Evaluation", p: [0.35, 64, 18], subs: [
+    ["Intrinsic Metrics", ["Perplexity", "Bits-per-byte", "Calibration"]],
+    ["Benchmarks", ["MMLU & knowledge suites", "Reasoning (GSM8K, MATH)", "Coding benchmarks", "Benchmark saturation"]],
+    ["Human & Model Judges", ["Pairwise preference", "Elo-style leaderboards", "LLM-as-judge biases", "Rubric-based grading"]],
+    ["Methodology", ["Contamination detection", "Prompt-format sensitivity", "Statistical significance", "Capability vs propensity"]],
+  ]},
+  { name: "Safety & Interpretability", p: [0.12, 58, 20], subs: [
+    ["Societal Risks", ["Bias & fairness measurement", "Toxicity", "Misinformation", "Privacy & memorization"]],
+    ["Adversarial Robustness", ["Jailbreak taxonomy", "Red-teaming practice", "Prompt-injection defenses"]],
+    ["Mechanistic Interpretability", ["Circuits & features", "Superposition", "Sparse autoencoders", "Induction heads", "Activation patching"]],
+    ["Representation Analysis", ["Probing classifiers", "Linear-representation hypothesis", "Steering vectors"]],
+    ["Governance", ["Deployment policies", "Evals-based safety cases", "Watermarking & provenance"]],
+  ]},
+];
+
+/* ── Deterministic simulated quiz history ─────────────────────────── */
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function leafScore(path, prof) {
+  const rng = mulberry32(hashStr(path));
+  if (rng() > prof[0]) return null;
+  const g = Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
+  return Math.max(4, Math.min(100, Math.round(prof[1] + g * prof[2])));
+}
+
+/* ── Build the tree ───────────────────────────────────────────────── */
+const BANDS = [
+  { id: "top",  label: "Mastered",     range: "90–100", test: s => s >= 90 },
+  { id: "hi",   label: "Solid",        range: "75–89",  test: s => s >= 75 },
+  { id: "mid",  label: "Partial",      range: "60–74",  test: s => s >= 60 },
+  { id: "f1",   label: "Failed",       range: "40–59",  test: s => s >= 40 },
+  { id: "f2",   label: "Failed badly", range: "0–39",   test: () => true },
+  { id: "none", label: "Not attempted", range: "—",     test: () => false },
+];
+function band(score) {
+  if (score == null) return "none";
+  return BANDS.find(b => b.test(score)).id;
+}
+
+const TREE = AREAS.map((a, i) => ({
+  name: a.name, i,
+  subs: a.subs.map((s, j) => {
+    const name = s[0];
+    const prof = typeof s[1][0] === "number" ? s[1] : a.p;
+    const leaves = (typeof s[1][0] === "number" ? s[2] : s[1]);
+    return {
+      name, j,
+      leaves: leaves.map((lf, k) => {
+        const path = `${a.name}/${name}/${lf}`;
+        return { name: lf, k, score: leafScore(path, prof) };
+      }),
+    };
+  }),
+}));
+
+function collectLeaves(node) {
+  if (node.leaves) return node.leaves;
+  if (node.subs) return node.subs.flatMap(collectLeaves);
+  return TREE.flatMap(collectLeaves);
+}
+function stats(node) {
+  const ls = collectLeaves(node);
+  const counts = { top: 0, hi: 0, mid: 0, f1: 0, f2: 0, none: 0 };
+  let attempted = 0;
+  for (const l of ls) {
+    counts[band(l.score)]++;
+    if (l.score != null) attempted++;
+  }
+  return { n: ls.length, attempted, counts, pct: Math.round(ls.reduce((t, l) => t + (l.score || 0), 0) / ls.length) };
+}
+
+/* ── Header: hero stat, distribution, legend ──────────────────────── */
+const root = stats({});
+document.getElementById("heroPct").textContent = root.pct + "%";
+document.getElementById("substats").textContent =
+  `${root.attempted} / ${root.n} leaves attempted · ${root.counts.top} mastered · ${root.counts.f1 + root.counts.f2} failed`;
+document.getElementById("distbar").innerHTML = BANDS.map(b =>
+  root.counts[b.id] ? `<span style="flex:${root.counts[b.id]};background:var(--c-${b.id})"></span>` : ""
+).join("");
+document.getElementById("legend").innerHTML = BANDS.map(b =>
+  `<span class="key"><span class="sw" style="background:var(--c-${b.id})"></span>${b.label}${b.range !== "—" ? " " + b.range : ""}</span>`
+).join("") + `<span class="hint">quiz score out of 100</span>`;
+
+/* ── Quantized lattice layout: one cell per leaf, reading order ───── */
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+function layoutArea(area) {
+  const total = area.subs.reduce((a, s) => a + s.leaves.length, 0);
+  const W = Math.ceil(Math.sqrt(total));
+  const H = Math.ceil(total / W);
+  return { W, H, spare: W * H - total };
+}
+
+/* ── Rendering ────────────────────────────────────────────────────── */
+const atlas = document.getElementById("atlas");
+const crumbsEl = document.getElementById("crumbs");
+let focusPath = []; // [] | [areaIdx] | [areaIdx, topicIdx]
+
+function mosaicHTML(area, big) {
+  const lay = layoutArea(area);
+  const cells = area.subs.flatMap(sub => sub.leaves.map((leaf, k) => {
+    const first = big && k === 0;
+    const attrs = first
+      ? ` role="button" tabindex="0" data-topic-focus aria-label="Zoom into ${esc(sub.name)}"`
+      : "";
+    return `<div class="cell" data-a="${area.i}" data-s="${sub.j}" data-l="${leaf.k}" style="background:var(--c-${band(leaf.score)})"${attrs}></div>`;
+  })).join("");
+  const spares = Array.from({ length: lay.spare }, () => `<div class="spare"></div>`).join("");
+  return `<div class="mosaic${big ? " mosaic-big" : ""}" data-area="${area.i}"
+    style="grid-template-columns:repeat(${lay.W},1fr);grid-template-rows:repeat(${lay.H},1fr)">${cells}${spares}<span class="blabel" hidden></span></div>`;
+}
+
+function render() {
+  if (focusPath.length === 0) {
+    atlas.innerHTML = TREE.map(area => {
+      const st = stats(area);
+      return `<button class="card" data-zoom="${area.i}" aria-label="Zoom into ${esc(area.name)}">
+        <div class="card-head"><span class="card-title">${esc(area.name)}</span><span class="chip">${st.pct}%</span></div>
+        ${mosaicHTML(area, false)}
+      </button>`;
+    }).join("");
+  } else if (focusPath.length === 1) {
+    const area = TREE[focusPath[0]];
+    atlas.innerHTML = `<div class="bigwrap">${mosaicHTML(area, true)}</div>`;
+  } else {
+    const area = TREE[focusPath[0]], sub = area.subs[focusPath[1]];
+    const lc = Math.ceil(Math.sqrt(sub.leaves.length));
+    atlas.innerHTML = `<div class="leafbig" style="grid-template-columns:repeat(${lc},1fr)">
+      ${sub.leaves.map(l => {
+        const bd = band(l.score);
+        const lab = BANDS.find(x => x.id === bd).label;
+        return `<div class="leafcell" style="background:var(--c-${bd})">
+          <span class="blabel">${esc(l.name)}<span class="bchip">${l.score == null ? "not attempted" : lab + " · " + l.score + "/100"}</span></span>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+  renderCrumbs();
+}
+
+function renderCrumbs() {
+  const parts = [`<button data-up="0">Large Language Models</button>`];
+  if (focusPath.length >= 1)
+    parts.push(`<span class="sep">▸</span>`, focusPath.length === 1
+      ? `<span class="here">${esc(TREE[focusPath[0]].name)}</span>`
+      : `<button data-up="1">${esc(TREE[focusPath[0]].name)}</button>`);
+  if (focusPath.length === 2)
+    parts.push(`<span class="sep">▸</span>`, `<span class="here">${esc(TREE[focusPath[0]].subs[focusPath[1]].name)}</span>`);
+  parts.push(`<span class="uphint">${focusPath.length ? "esc ↑ zoom out" : "click a tile to zoom"}</span>`);
+  crumbsEl.innerHTML = parts.join("");
+}
+
+/* ── Zooming: FLIP so the mosaic magnifies in place ───────────────── */
+function reduceMotion() { return matchMedia("(prefers-reduced-motion: reduce)").matches; }
+
+function applyFlip(el, dx, dy, kx, ky) {
+  el.style.transformOrigin = "0 0";
+  el.style.transform = `translate(${dx}px,${dy}px) scale(${kx},${ky})`;
+  el.style.zIndex = "5";
+  el.style.willChange = "transform";
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.style.transition = "transform 340ms cubic-bezier(.2,.72,.2,1)";
+    el.style.transform = "";
+    el.addEventListener("transitionend", () => {
+      el.style.transition = ""; el.style.zIndex = ""; el.style.willChange = "";
+    }, { once: true });
+  }));
+}
+/* Animate el so that it starts where fromRect was. */
+function flip(fromRect, el) {
+  if (reduceMotion()) return;
+  const to = el.getBoundingClientRect();
+  if (!to.width || !to.height || !fromRect.width || !fromRect.height) return;
+  applyFlip(el, fromRect.left - to.left, fromRect.top - to.top,
+    fromRect.width / to.width, fromRect.height / to.height);
+}
+/* Animate el so that its inner region (innerRect) starts where oldRect was. */
+function flipFrom(el, innerRect, oldRect) {
+  if (reduceMotion()) return;
+  const E = el.getBoundingClientRect();
+  if (!innerRect.width || !oldRect.width) return;
+  const k = oldRect.width / innerRect.width;
+  applyFlip(el,
+    oldRect.left - E.left - k * (innerRect.left - E.left),
+    oldRect.top - E.top - k * (innerRect.top - E.top),
+    k, k);
+}
+function unionRect(els) {
+  let l = 1e9, t = 1e9, r = -1e9, b = -1e9;
+  els.forEach(el => {
+    const q = el.getBoundingClientRect();
+    l = Math.min(l, q.left); t = Math.min(t, q.top);
+    r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+  });
+  return { left: l, top: t, width: r - l, height: b - t };
+}
+function topicCells(container, s) {
+  return [...container.querySelectorAll(`.cell[data-s="${s}"]`)];
+}
+
+function zoomTo(path, fromRect) {
+  focusPath = path;
+  hideTip();
+  render();
+  if (!fromRect) return;
+  const target = focusPath.length === 1 ? atlas.querySelector(".mosaic-big")
+    : focusPath.length === 2 ? atlas.querySelector(".leafbig") : null;
+  if (target) flip(fromRect, target);
+}
+
+function zoomOut(levels) {
+  if (!focusPath.length) return;
+  const prev = focusPath.slice();
+  const fromEl = atlas.querySelector(".mosaic-big, .leafbig");
+  const fromRect = fromEl ? fromEl.getBoundingClientRect() : null;
+  focusPath = focusPath.slice(0, Math.max(0, focusPath.length - levels));
+  hideTip();
+  render();
+  if (!fromRect) return;
+  if (focusPath.length === 0) {
+    const target = atlas.querySelector(`[data-zoom="${prev[0]}"] .mosaic`);
+    if (target) flip(fromRect, target);
+  } else {
+    const big = atlas.querySelector(".mosaic-big");
+    if (big) flipFrom(big, unionRect(topicCells(big, prev[1])), fromRect);
+  }
+}
+
+/* ── Interaction ──────────────────────────────────────────────────── */
+atlas.addEventListener("click", e => {
+  const card = e.target.closest("[data-zoom]");
+  if (card) {
+    zoomTo([Number(card.dataset.zoom)], card.querySelector(".mosaic").getBoundingClientRect());
+    return;
+  }
+  const cell = e.target.closest(".mosaic-big .cell");
+  if (cell) {
+    const big = cell.closest(".mosaic-big");
+    const s = Number(cell.dataset.s);
+    zoomTo([Number(big.dataset.area), s], unionRect(topicCells(big, s)));
+  }
+});
+atlas.addEventListener("keydown", e => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-topic-focus]")) {
+    e.preventDefault();
+    e.target.click();
+  }
+});
+crumbsEl.addEventListener("click", e => {
+  const b = e.target.closest("[data-up]");
+  if (!b) return;
+  zoomOut(focusPath.length - Number(b.dataset.up));
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") zoomOut(1);
+});
+
+/* Hover: reveal the hovered cell's topic region, and its label in the big view. */
+let hoverKey = null;
+function clearHover() {
+  if (hoverKey == null) return;
+  hoverKey = null;
+  document.querySelectorAll(".cell.hl").forEach(c => c.classList.remove("hl"));
+  document.querySelectorAll(".blabel:not([hidden])").forEach(lb => {
+    if (!lb.closest(".leafcell")) lb.hidden = true;
+  });
+}
+function setHover(cell) {
+  const mos = cell.closest(".mosaic");
+  const key = `${cell.dataset.a}/${cell.dataset.s}`;
+  if (key === hoverKey) return;
+  clearHover();
+  hoverKey = key;
+  const group = topicCells(mos, cell.dataset.s);
+  group.forEach(c => c.classList.add("hl"));
+  if (mos.classList.contains("mosaic-big")) {
+    const area = TREE[+mos.dataset.area], sub = area.subs[+cell.dataset.s];
+    const st = stats(sub);
+    const lb = mos.querySelector(".blabel");
+    lb.innerHTML = `${esc(sub.name)}<span class="bchip">${st.attempted}/${st.n} · ${st.pct}%</span>`;
+    const mr = mos.getBoundingClientRect(), fr = group[0].getBoundingClientRect();
+    lb.style.left = (fr.left - mr.left + 8) + "px";
+    lb.style.top = (fr.top - mr.top + 8) + "px";
+    lb.hidden = false;
+  }
+}
+
+const tip = document.getElementById("tip");
+function hideTip() { tip.style.display = "none"; clearHover(); }
+atlas.addEventListener("mousemove", e => {
+  const c = e.target.closest(".cell");
+  if (!c) return hideTip();
+  setHover(c);
+  const area = TREE[+c.dataset.a], sub = area.subs[+c.dataset.s], leaf = sub.leaves[+c.dataset.l];
+  const b = band(leaf.score);
+  const lab = BANDS.find(x => x.id === b).label;
+  tip.innerHTML = `<div class="tpath">${esc(area.name)} ▸ ${esc(sub.name)}</div>
+    <div class="tname">${esc(leaf.name)}</div>
+    <div class="tstate"><i style="background:var(--c-${b})"></i>${leaf.score == null ? "Not attempted" : lab + " · " + leaf.score + "/100"}</div>`;
+  tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - r.width - 10) + "px";
+  tip.style.top = (e.clientY + 16 + r.height > innerHeight ? e.clientY - r.height - 10 : e.clientY + 16) + "px";
+});
+atlas.addEventListener("mouseleave", hideTip);
+
+render();
+</script>
