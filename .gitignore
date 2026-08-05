@@ -221,3 +221,4 @@ __marimo__/
 node_modules/
 web/dist/
 reader.db
+.playwright-mcp/
