@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 
 function bookmarkletHref(origin: string): string {
-  const source = `(function(){fetch('${origin}/api/articles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:location.href,title:document.title})}).then(function(r){return r.json()}).then(function(d){var t=document.createElement('div');t.textContent=d.duplicate?'nano::nerd: already saved':'nano::nerd: saved';t.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#111;color:#fff;padding:10px 14px;border-radius:8px;font:14px system-ui';document.body.appendChild(t);setTimeout(function(){t.remove()},2000)}).catch(function(){alert('nano::nerd: save failed')})})();`;
+  const source = `(function(){fetch('${origin}/api/articles',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:location.href,title:document.title})}).then(function(r){if(!r.ok){throw new Error(String(r.status))}return r.json()}).then(function(d){var t=document.createElement('div');t.textContent=d.duplicate?'nano::nerd: already saved':'nano::nerd: saved';t.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#111;color:#fff;padding:10px 14px;border-radius:8px;font:14px system-ui';document.body.appendChild(t);setTimeout(function(){t.remove()},2000)}).catch(function(){alert('nano::nerd: save failed')})})();`;
   return `javascript:${encodeURIComponent(source)}`;
 }
 
