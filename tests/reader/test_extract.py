@@ -1,4 +1,8 @@
-from nanonerd.reader.extract import extract_article
+import socket
+
+import pytest
+
+from nanonerd.reader.extract import _ensure_public_http_url, extract_article
 
 FIXTURE_HTML = """<!doctype html>
 <html>
@@ -55,3 +59,31 @@ def test_extract_article_returns_content_and_metadata():
 def test_extract_article_returns_none_for_empty_page():
     output = extract_article("<html><body></body></html>", "https://x.com/a")
     assert output is None
+
+
+def test_ensure_public_http_url_rejects_file_scheme():
+    with pytest.raises(ValueError):
+        _ensure_public_http_url("file:///etc/passwd")
+
+
+def test_ensure_public_http_url_rejects_localhost():
+    with pytest.raises(ValueError):
+        _ensure_public_http_url("http://localhost:8000/x")
+
+
+def test_ensure_public_http_url_rejects_loopback_ip():
+    with pytest.raises(ValueError):
+        _ensure_public_http_url("http://127.0.0.1/x")
+
+
+def test_ensure_public_http_url_rejects_link_local_metadata_ip():
+    with pytest.raises(ValueError):
+        _ensure_public_http_url("http://169.254.169.254/latest/meta-data")
+
+
+def test_ensure_public_http_url_accepts_public_ip(monkeypatch):
+    def fake_getaddrinfo(host, port):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    _ensure_public_http_url("http://example.com/x")
