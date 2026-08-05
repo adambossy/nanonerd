@@ -24,7 +24,7 @@ ignore = [
 "tests/**" = ["S101", "S106"]  # S101: assert, S106: hardcoded passwords (test data)
 
 [lint.isort]
-known-first-party = ["tutor"]
+known-first-party = ["nanonerd"]
 combine-as-imports = true
 force-sort-within-sections = true
 
