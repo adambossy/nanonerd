@@ -6,6 +6,7 @@
   --card: #ffffff;
   --border: #e6e0d6;
   --rail: #a8bda1;
+  --rail-unread: #ddd4c4;
   --danger: #b3261e;
 }
 @media (prefers-color-scheme: dark) {
@@ -17,6 +18,7 @@
     --card: #211e1a;
     --border: #35302a;
     --rail: #55684f;
+    --rail-unread: #3b352c;
     --danger: #e4685f;
   }
 }
@@ -117,7 +119,7 @@ a { color: inherit; }
   margin-bottom: 2.2rem;
 }
 .reader section { position: relative; }
-.reader section.read::before {
+.reader section::before {
   content: "";
   position: absolute;
   left: -1rem;
@@ -125,6 +127,10 @@ a { color: inherit; }
   bottom: 0.4rem;
   width: 3px;
   border-radius: 2px;
+  background: var(--rail-unread);
+  transition: background 0.4s ease;
+}
+.reader section.read::before {
   background: var(--rail);
 }
 .reader img { max-width: 100%; height: auto; }
