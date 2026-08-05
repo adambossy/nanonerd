@@ -34,3 +34,16 @@ def test_chunk_html_keeps_short_trailing_chunk():
 def test_html_to_text_strips_markup():
     output = html_to_text("<p>Hello <em>city</em> planners</p>")
     assert output == "Hello city planners"
+
+
+def test_chunk_html_strips_javascript_hrefs():
+    input_html = (
+        "<p>"
+        + " ".join(f"w{i}" for i in range(150))
+        + ' <a href="javascript:alert(1)">x</a>'
+        + ' <a href="https://ok.example/a">y</a></p>'
+    )
+    output = chunk_html(input_html)
+    html = "".join(c.html for c in output)
+    assert "https://ok.example/a" in html
+    assert "javascript:" not in html

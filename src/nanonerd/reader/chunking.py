@@ -1,17 +1,23 @@
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from lxml import html as lxml_html
 
 MIN_CHUNK_WORDS = 150
 MAX_CHUNK_WORDS = 300
 _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+_SAFE_HREF_SCHEMES = {"", "http", "https", "mailto"}
 
 
 class _Element(Protocol):
     tag: str | object
+    attrib: MutableMapping[str, str]
 
     def text_content(self) -> str: ...
+    def get(self, key: str) -> str | None: ...
+    def iter(self, tag: str) -> Iterator["_Element"]: ...
 
 
 @dataclass
@@ -35,8 +41,20 @@ def _serialize(elements: list[_Element]) -> str:
     )
 
 
+def _sanitize_hrefs(root: _Element) -> None:
+    """Strip hrefs with unsafe schemes (e.g. javascript:) from anchor tags."""
+    for anchor in root.iter("a"):
+        href = anchor.get("href")
+        if href is None:
+            continue
+        scheme = urlsplit(href).scheme.lower()
+        if scheme not in _SAFE_HREF_SCHEMES:
+            del anchor.attrib["href"]
+
+
 def chunk_html(content_html: str) -> list[ChunkData]:
     root = lxml_html.fragment_fromstring(content_html, create_parent="div")
+    _sanitize_hrefs(root)
     blocks: list[_Element] = [child for child in root if isinstance(child.tag, str)]
 
     chunks: list[ChunkData] = []
