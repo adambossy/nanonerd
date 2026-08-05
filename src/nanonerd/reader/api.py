@@ -45,6 +45,7 @@ def _summary(article: Article, read_words: int) -> ArticleSummary:
         title=article.title,
         url=article.url,
         site_name=article.site_name,
+        author=article.author,
         status=article.status,
         error=article.error,
         word_count=article.word_count,

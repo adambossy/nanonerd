@@ -53,8 +53,8 @@ export default function Reader() {
         </nav>
         <h1 className="article-title">{article.title}</h1>
         <p className="byline">
-          {article.site_name && `${article.site_name} · `}
-          <a href={article.url}>original</a>
+          {[article.site_name, article.author].filter(Boolean).join(" · ")}{" "}
+          · <a href={article.url}>original</a>
         </p>
         {article.chunks.map((chunk) => (
           <section

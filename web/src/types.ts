@@ -3,6 +3,7 @@ export interface ArticleSummary {
   title: string;
   url: string;
   site_name: string | null;
+  author: string | null;
   status: "pending" | "ready" | "failed";
   error: string | null;
   word_count: number;

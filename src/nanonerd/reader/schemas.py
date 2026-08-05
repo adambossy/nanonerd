@@ -19,6 +19,7 @@ class ArticleSummary(BaseModel):
     title: str
     url: str
     site_name: str | None
+    author: str | None
     status: str
     error: str | None
     word_count: int
