@@ -29,10 +29,14 @@ _Avoid_: Expansion, drilling down (that's zooming, a view action)
 ### Mastery
 
 **Quiz**:
-The generated assessment attached to a leaf, graded against its Rubric.
+The set of Questions generated for a frontier node, graded against its Rubric.
+
+**Question**:
+The atomic unit of mastery — one prompt answered against the rubric, scored and colorized like any other node. Every color above a question is a rollup of questions.
+_Avoid_: Item, exercise
 
 **Rubric**:
-The grading criteria generated alongside a leaf's quiz that define what mastery of it means.
+The grading criteria generated alongside a node's quiz that define what mastery of it means.
 
 **Score**:
 The 0–100 result of a leaf's most recent quiz. Absent until first attempt.
