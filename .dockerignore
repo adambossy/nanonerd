@@ -1,0 +1,7 @@
+.git
+.venv
+web/node_modules
+web/dist
+reader.db
+docs
+tests
