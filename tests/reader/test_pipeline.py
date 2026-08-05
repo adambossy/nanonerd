@@ -4,7 +4,7 @@ from sqlalchemy.pool import StaticPool
 
 from nanonerd.reader import pipeline
 from nanonerd.reader.extract import Extraction
-from nanonerd.reader.models import Article, Base
+from nanonerd.reader.models import Article, Base, Category
 
 CONTENT_HTML = (
     "<p>" + " ".join(f"alpha{i}" for i in range(180)) + "</p>"
@@ -112,3 +112,39 @@ def test_process_article_categorization_failure_is_nonfatal(monkeypatch):
 
     output = fetch_article(factory, article_id)
     assert (output["status"], output["categories"]) == ("ready", [])
+
+
+def test_process_article_reuses_categories_case_insensitive(monkeypatch):
+    factory = create_session_factory()
+
+    # Seed existing category
+    with factory() as session:
+        session.add(Category(name="Transit"))
+        session.commit()
+
+    article_id = create_pending_article(factory)
+    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
+    monkeypatch.setattr(
+        pipeline,
+        "extract_article",
+        lambda html, url: Extraction(
+            title="Title", author=None, site_name=None, content_html=CONTENT_HTML
+        ),
+    )
+    # Return lowercase "transit" to test case-insensitive matching, plus new "Parks"
+    monkeypatch.setattr(
+        pipeline,
+        "assign_categories",
+        lambda title, text, existing: ["transit", "Parks"],
+    )
+
+    pipeline.process_article(article_id, session_factory=factory)
+
+    output = fetch_article(factory, article_id)
+    # Should reuse existing "Transit" category, not create a duplicate "transit"
+    assert output["categories"] == ["Parks", "Transit"]
+
+    # Verify no duplicate category was created
+    with factory() as session:
+        category_count = session.query(Category).count()
+    assert category_count == 2
