@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from nanonerd.reader import pipeline
 from nanonerd.reader.db import get_session
@@ -74,7 +74,9 @@ def save_article(
 @router.get("/articles", response_model=list[ArticleSummary])
 def list_articles(session: SessionDep) -> list[ArticleSummary]:
     articles = session.scalars(
-        select(Article).order_by(Article.priority.desc(), Article.added_at.desc())
+        select(Article)
+        .options(selectinload(Article.categories))
+        .order_by(Article.priority.desc(), Article.added_at.desc())
     ).all()
     read_by_article: dict[int, int] = {
         article_id: int(total)
