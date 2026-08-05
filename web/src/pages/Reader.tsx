@@ -8,12 +8,17 @@ export default function Reader() {
   const { id } = useParams();
   const articleId = Number(id);
   const [article, setArticle] = useState<ArticleDetail | null>(null);
+  const [failed, setFailed] = useState(false);
   const readIds = useReadTracking(articleId, article);
 
   useEffect(() => {
+    if (!Number.isFinite(articleId)) {
+      setFailed(true);
+      return;
+    }
     getArticle(articleId)
       .then(setArticle)
-      .catch(() => undefined);
+      .catch(() => setFailed(true));
   }, [articleId]);
 
   // Open at the earliest unread chunk.
@@ -37,6 +42,15 @@ export default function Reader() {
     return (100 * read) / total;
   }, [article, readIds]);
 
+  if (failed) {
+    return (
+      <main className="reader">
+        <p>Couldn't load this article.</p>
+        <Link to="/">back</Link>
+      </main>
+    );
+  }
+
   if (!article) {
     return <main className="reader">loading…</main>;
   }
@@ -53,8 +67,11 @@ export default function Reader() {
         </nav>
         <h1 className="article-title">{article.title}</h1>
         <p className="byline">
-          {[article.site_name, article.author].filter(Boolean).join(" · ")}{" "}
-          · <a href={article.url}>original</a>
+          {[article.site_name, article.author]
+            .filter(Boolean)
+            .map((part) => `${part} · `)
+            .join("")}
+          <a href={article.url}>original</a>
         </p>
         {article.chunks.map((chunk) => (
           <section
