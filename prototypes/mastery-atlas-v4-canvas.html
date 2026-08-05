@@ -252,11 +252,16 @@ function setFocus(node) {
    `projectedK` carries gesture momentum — the level is chosen from where
    the zoom was HEADED, not where the fingers stopped. ── */
 let gestureK0 = null;
+let anchor = null; /* screen point the gesture is zooming toward */
 function doSnap(projectedK = cam.k) {
   const ratio = gestureK0 ? projectedK / gestureK0 : 1;
   gestureK0 = null;
-  const c = s2w(vw / 2, vh / 2);
-  /* candidate chain: root → … → deepest node under the viewport center */
+  /* descend through the gesture's anchor, not the viewport center — the
+     level we settle on is the one under the pointer, so the settle is a
+     small completion of the zoom rather than a lunge toward mid-screen */
+  const c = s2w(anchor ? anchor.x : vw / 2, anchor ? anchor.y : vh / 2);
+  anchor = null;
+  /* candidate chain: root → … → deepest node under the anchor */
   const chain = [root];
   let n = root;
   while (true) {
@@ -293,6 +298,7 @@ cv.addEventListener("wheel", e => {
   dismissHint();
   goal = null;
   if (gestureK0 == null) gestureK0 = cam.k;
+  anchor = { x: e.clientX, y: e.clientY };
   const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.014 : 0.002));
   const k2 = Math.min(KMAX(), Math.max(KMIN(), cam.k * factor));
   cam.tx = e.clientX - (e.clientX - cam.tx) * (k2 / cam.k);
@@ -337,6 +343,7 @@ cv.addEventListener("pointermove", e => {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    anchor = { x: mx, y: my };
     /* amplified: a subtle pinch travels a full level */
     const k2 = Math.min(KMAX(), Math.max(KMIN(), pinchStart.k * Math.pow(d / pinchStart.d, 1.7)));
     const now = performance.now();
