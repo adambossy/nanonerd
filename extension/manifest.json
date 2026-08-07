@@ -10,7 +10,7 @@
   },
   "background": { "service_worker": "background.js" },
   "options_page": "options.html",
-  "permissions": ["storage", "activeTab", "contextMenus"],
+  "permissions": ["storage", "activeTab", "contextMenus", "scripting"],
   "host_permissions": [
     "http://localhost:8000/*",
     "https://nanonerd-reader.fly.dev/*"
