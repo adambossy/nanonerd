@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getArticle } from "../api";
 import { useReadTracking } from "../reader/useReadTracking";
+import { useReadingSession } from "../reader/useReadingSession";
 import type { ArticleDetail } from "../types";
 
 export default function Reader() {
@@ -10,6 +11,7 @@ export default function Reader() {
   const [article, setArticle] = useState<ArticleDetail | null>(null);
   const [failed, setFailed] = useState(false);
   const readIds = useReadTracking(articleId, article);
+  useReadingSession(articleId, article !== null);
 
   useEffect(() => {
     if (!Number.isFinite(articleId)) {
