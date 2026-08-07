@@ -71,6 +71,22 @@ class Chunk(Base):
     article: Mapped[Article] = relationship(back_populates="chunks")
 
 
+class ReadingSession(Base):
+    __tablename__ = "reading_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    last_active_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    active_seconds: Mapped[int] = mapped_column(default=0)
+
+
 class Category(Base):
     __tablename__ = "categories"
 

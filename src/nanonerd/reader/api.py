@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from nanonerd.reader import pipeline
 from nanonerd.reader.db import get_session
-from nanonerd.reader.models import Article, Chunk
+from nanonerd.reader.models import Article, Chunk, ReadingSession
 from nanonerd.reader.schemas import (
     ArticleDetail,
     ArticleSummary,
@@ -16,6 +16,9 @@ from nanonerd.reader.schemas import (
     ProgressResponse,
     SaveRequest,
     SaveResponse,
+    SessionCreated,
+    SessionState,
+    SessionUpdate,
 )
 from nanonerd.reader.urlnorm import normalize_url
 
@@ -149,3 +152,28 @@ def retry_article(
     session.commit()
     background.add_task(pipeline.process_article, article.id)
     return SaveResponse(id=article.id, duplicate=False, status="pending")
+
+
+@router.post("/articles/{article_id}/sessions", response_model=SessionCreated)
+def create_reading_session(article_id: int, session: SessionDep) -> SessionCreated:
+    article = session.get(Article, article_id)
+    if article is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    reading = ReadingSession(article_id=article_id)
+    session.add(reading)
+    session.commit()
+    return SessionCreated(id=reading.id)
+
+
+@router.post("/sessions/{session_id}", response_model=SessionState)
+def update_reading_session(
+    session_id: int, payload: SessionUpdate, session: SessionDep
+) -> SessionState:
+    reading = session.get(ReadingSession, session_id)
+    if reading is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    if payload.active_seconds > reading.active_seconds:
+        reading.active_seconds = payload.active_seconds
+        reading.last_active_at = datetime.now(UTC)
+        session.commit()
+    return SessionState(id=reading.id, active_seconds=reading.active_seconds)

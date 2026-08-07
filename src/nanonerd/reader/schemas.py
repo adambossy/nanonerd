@@ -47,3 +47,16 @@ class ProgressRequest(BaseModel):
 
 class ProgressResponse(BaseModel):
     percent_read: float
+
+
+class SessionCreated(BaseModel):
+    id: int
+
+
+class SessionUpdate(BaseModel):
+    active_seconds: int
+
+
+class SessionState(BaseModel):
+    id: int
+    active_seconds: int
