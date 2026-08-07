@@ -50,6 +50,8 @@ export function useReadingSession(articleId: number, ready: boolean): void {
               }).catch(() => {
                 syncedSeconds = 0; // retry on a later tick
               });
+            } else {
+              creating = false; // retry on a later tick
             }
           })
           .catch(() => {
