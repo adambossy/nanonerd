@@ -24,3 +24,36 @@ export interface ChunkData {
 export interface ArticleDetail extends ArticleSummary {
   chunks: ChunkData[];
 }
+
+export interface StatsTotals {
+  active_seconds: number;
+  articles_saved: number;
+  articles_finished: number;
+  words_read: number;
+}
+
+export interface TopicStats {
+  name: string;
+  saved: number;
+  read_through: number;
+  active_seconds: number;
+}
+
+export interface DailyStats {
+  date: string;
+  active_seconds: number;
+}
+
+export interface TopArticle {
+  id: number;
+  title: string;
+  active_seconds: number;
+  percent_read: number;
+}
+
+export interface StatsResponse {
+  totals: StatsTotals;
+  topics: TopicStats[];
+  daily: DailyStats[];
+  top_articles: TopArticle[];
+}
