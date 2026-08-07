@@ -13,13 +13,7 @@ export function useReadingSession(articleId: number, ready: boolean): void {
     let lastInteraction = performance.now();
     let lastTick = performance.now();
     let cancelled = false;
-
-    fetch(`/api/articles/${articleId}/sessions`, { method: "POST" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ id: number }>) : null))
-      .then((data) => {
-        if (!cancelled && data) sessionId = data.id;
-      })
-      .catch(() => undefined);
+    let creating = false;
 
     const interact = () => {
       lastInteraction = performance.now();
@@ -39,7 +33,30 @@ export function useReadingSession(articleId: number, ready: boolean): void {
 
     const sync = () => {
       const seconds = Math.floor(activeMs / 1000);
-      if (sessionId === null || seconds <= syncedSeconds) return;
+      if (seconds <= syncedSeconds) return;
+      if (sessionId === null) {
+        if (creating) return;
+        creating = true;
+        fetch(`/api/articles/${articleId}/sessions`, { method: "POST" })
+          .then((r) => (r.ok ? (r.json() as Promise<{ id: number }>) : null))
+          .then((data) => {
+            if (!cancelled && data) {
+              sessionId = data.id;
+              syncedSeconds = seconds;
+              fetch(`/api/sessions/${sessionId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: body(),
+              }).catch(() => {
+                syncedSeconds = 0; // retry on a later tick
+              });
+            }
+          })
+          .catch(() => {
+            creating = false; // retry on a later tick
+          });
+        return;
+      }
       syncedSeconds = seconds;
       fetch(`/api/sessions/${sessionId}`, {
         method: "POST",
@@ -52,8 +69,9 @@ export function useReadingSession(articleId: number, ready: boolean): void {
 
     const beaconSync = () => {
       accumulate();
+      if (sessionId === null) return;
       const seconds = Math.floor(activeMs / 1000);
-      if (sessionId === null || seconds <= syncedSeconds) return;
+      if (seconds <= syncedSeconds) return;
       syncedSeconds = seconds;
       navigator.sendBeacon(
         `/api/sessions/${sessionId}`,
