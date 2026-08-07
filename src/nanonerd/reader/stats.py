@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time as dt_time, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -92,8 +92,8 @@ def get_stats(session: SessionDep) -> StatsResponse:
         key=lambda topic: (-topic.active_seconds, -topic.saved, topic.name),
     )
 
-    window_start = datetime.now(UTC) - timedelta(days=DAILY_WINDOW_DAYS - 1)
-    day_zero = window_start.date()
+    day_zero = (datetime.now(UTC) - timedelta(days=DAILY_WINDOW_DAYS - 1)).date()
+    window_start = datetime.combine(day_zero, dt_time.min, tzinfo=UTC)
     per_day: dict[str, int] = {}
     for reading in session.scalars(
         select(ReadingSession).where(ReadingSession.started_at >= window_start)

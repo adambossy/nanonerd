@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 from nanonerd.reader.models import Article, Category, Chunk, ReadingSession
 from tests.reader.webapp import create_test_client
@@ -134,3 +134,38 @@ def test_stats_empty_database(monkeypatch):
     }
     assert (output["topics"], output["top_articles"]) == ([], [])
     assert len(output["daily"]) == 30
+
+
+def test_stats_daily_window_includes_early_morning_session(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+
+    # Regression test: ensure sessions at early morning on the oldest window day
+    # are included in the daily rollup (window_start must be day-aligned to midnight)
+    now = datetime.now(UTC)
+    oldest_day = now.date() - timedelta(days=29)
+    early_morning_start = datetime.combine(oldest_day, time(minute=30), tzinfo=UTC)
+
+    with factory() as session:
+        article = Article(
+            url="https://example.com/early",
+            title="Early",
+            status="ready",
+            word_count=50,
+            chunks=[Chunk(position=0, html="<p>early</p>", word_count=50)],
+        )
+        session.add(article)
+        session.commit()
+        session.add(
+            ReadingSession(
+                article_id=article.id,
+                started_at=early_morning_start,
+                last_active_at=early_morning_start,
+                active_seconds=300,
+            )
+        )
+        session.commit()
+
+    output = client.get("/api/stats").json()
+
+    # daily[0] is the oldest day; it should include the early morning session
+    assert output["daily"][0]["active_seconds"] == 300
