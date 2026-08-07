@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from nanonerd.reader.api import router
 from nanonerd.reader.db import engine
 from nanonerd.reader.models import Base
+from nanonerd.reader.stats import router as stats_router
 
 
 def _web_dist() -> Path:
@@ -34,6 +35,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(stats_router)
 
 _dist = _web_dist()
 if _dist.is_dir():

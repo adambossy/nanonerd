@@ -8,6 +8,7 @@ from nanonerd.reader import pipeline
 from nanonerd.reader.api import router
 from nanonerd.reader.db import get_session
 from nanonerd.reader.models import Base
+from nanonerd.reader.stats import router as stats_router
 
 
 def create_test_client(monkeypatch):
@@ -19,6 +20,7 @@ def create_test_client(monkeypatch):
 
     app = FastAPI()
     app.include_router(router)
+    app.include_router(stats_router)
 
     def override():
         with factory() as session:

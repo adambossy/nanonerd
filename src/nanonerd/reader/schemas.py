@@ -60,3 +60,36 @@ class SessionUpdate(BaseModel):
 class SessionState(BaseModel):
     id: int
     active_seconds: int
+
+
+class StatsTotals(BaseModel):
+    active_seconds: int
+    articles_saved: int
+    articles_finished: int
+    words_read: int
+
+
+class TopicStats(BaseModel):
+    name: str
+    saved: int
+    read_through: float
+    active_seconds: int
+
+
+class DailyStats(BaseModel):
+    date: str
+    active_seconds: int
+
+
+class TopArticle(BaseModel):
+    id: int
+    title: str
+    active_seconds: int
+    percent_read: float
+
+
+class StatsResponse(BaseModel):
+    totals: StatsTotals
+    topics: list[TopicStats]
+    daily: list[DailyStats]
+    top_articles: list[TopArticle]
