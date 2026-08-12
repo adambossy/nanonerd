@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>nano::nerd options</title>
+    <style>
+      body {
+        font-family: ui-monospace, Menlo, monospace;
+        max-width: 26rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #1f1d1a;
+      }
+      label { display: block; margin-bottom: 0.4rem; font-weight: 700; }
+      input {
+        width: 100%;
+        padding: 0.45rem 0.6rem;
+        font: inherit;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-sizing: border-box;
+      }
+      button {
+        margin-top: 0.75rem;
+        padding: 0.45rem 1rem;
+        font: inherit;
+        border: none;
+        border-radius: 6px;
+        background: #b4552d;
+        color: #fff;
+        cursor: pointer;
+      }
+      #status { margin-left: 0.6rem; color: #3d7a3f; }
+      p.hint { color: #6d675e; font-size: 0.85em; }
+    </style>
+  </head>
+  <body>
+    <h1>nano::nerd</h1>
+    <label for="apiBase">API base URL</label>
+    <input id="apiBase" type="url" placeholder="http://localhost:8000" />
+    <p class="hint">
+      Where your reader runs — http://localhost:8000 for local dev, or your
+      Fly.io URL once deployed. If you use a host other than the defaults,
+      also add it to host_permissions in manifest.json and reload the
+      extension.
+    </p>
+    <button id="save">Save</button><span id="status"></span>
+    <script src="options.js"></script>
+  </body>
+</html>
