@@ -127,9 +127,142 @@ a { color: inherit; }
   border-radius: 2px;
   background: var(--rail);
 }
-.reader img { max-width: 100%; height: auto; }
-.reader pre { overflow-x: auto; font-size: 0.85rem; }
-.reader blockquote { border-left: 3px solid var(--border); margin-left: 0; padding-left: 1rem; color: var(--muted); }
+.reader h2 { font-size: 1.3rem; line-height: 1.3; margin: 2rem 0 0.6rem; }
+.reader h3 { font-size: 1.1rem; line-height: 1.35; margin: 1.6rem 0 0.5rem; }
+.reader h4, .reader h5, .reader h6 { font-size: 1rem; margin: 1.4rem 0 0.4rem; }
+.reader hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+.reader img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+.reader figure { margin: 1.6rem 0; }
+.reader figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--muted);
+  text-align: center;
+}
+
+.reader code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+.reader :not(pre) > code {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  overflow-wrap: anywhere;
+}
+.reader pre {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin: 1.2rem 0;
+  white-space: pre;
+  tab-size: 4;
+}
+.reader pre code { white-space: pre; font-size: 1em; }
+.reader pre.latex { white-space: pre-wrap; text-align: center; }
+
+.reader blockquote {
+  border-left: 3px solid var(--border);
+  margin: 1.2rem 0;
+  padding-left: 1rem;
+  color: var(--muted);
+}
+.reader blockquote[data-callout] {
+  color: var(--fg);
+  background: var(--card);
+  border-left-color: var(--accent);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7rem 1rem;
+}
+.reader blockquote[data-callout] > :first-child { margin-top: 0; }
+.reader blockquote[data-callout] > :last-child { margin-bottom: 0; }
+.reader blockquote[data-callout] > p:first-child > strong:only-child {
+  color: var(--accent);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.reader blockquote[data-callout="tip"],
+.reader blockquote[data-callout="success"] { border-left-color: #4f8a5b; }
+.reader blockquote[data-callout="tip"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="success"] > p:first-child > strong:only-child { color: #4f8a5b; }
+.reader blockquote[data-callout="warning"],
+.reader blockquote[data-callout="caution"] { border-left-color: #c28a1d; }
+.reader blockquote[data-callout="warning"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="caution"] > p:first-child > strong:only-child { color: #c28a1d; }
+.reader blockquote[data-callout="danger"],
+.reader blockquote[data-callout="error"],
+.reader blockquote[data-callout="bug"] { border-left-color: var(--danger); }
+.reader blockquote[data-callout="danger"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="error"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="bug"] > p:first-child > strong:only-child { color: var(--danger); }
+
+.reader table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 1.2rem 0;
+}
+.reader th, .reader td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.reader th {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.reader video, .reader audio {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 1rem auto;
+}
+.reader video { border-radius: 8px; background: #000; }
+
+.reader math { font-size: 1.05em; }
+.reader math[display="block"] {
+  display: block;
+  overflow-x: auto;
+  margin: 1.2rem 0;
+  text-align: center;
+}
+
+.reader sup { line-height: 0; }
+.reader sup a {
+  text-decoration: none;
+  color: var(--accent);
+  padding: 0 0.15rem;
+}
+.reader a.footnote-backref { text-decoration: none; margin-left: 0.3rem; }
+.reader [id^="nn-"] { scroll-margin-top: 1.25rem; }
+.reader ol[start] li, .reader li { margin-bottom: 0.25rem; }
+.reader li > p { margin: 0.2rem 0; }
+.source-note { color: var(--accent); }
+html { scroll-behavior: smooth; }
 
 .setup { max-width: 42rem; margin: 0 auto; padding: 0.5rem 1rem 3rem; line-height: 1.6; }
 .setup h2 { margin-top: 2rem; font-size: 1.15rem; }
