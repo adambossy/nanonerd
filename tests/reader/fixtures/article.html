@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Harnesses, Briefly</title>
+  <meta name="author" content="Jane Doe">
+  <meta property="og:site_name" content="Fixture Log">
+  <meta property="og:title" content="Harnesses, Briefly">
+</head>
+<body>
+<nav><a href="/">Home</a> <a href="/about">About</a> <a href="/tags">Tags</a></nav>
+<header><h1>Harnesses, Briefly</h1><p class="byline">By Jane Doe</p></header>
+<main>
+<article>
+<p>An agent harness is the scaffolding around a model: the tool loop, the
+context assembly, the stop conditions, and the evaluation hooks that let a
+team iterate on behavior without retraining anything. This fixture exercises
+every construct the reader has to preserve on the way from a rendered page to
+a list of chunks, so the prose here is only padding around the interesting
+markup that follows.<sup id="fnref:1"><a href="#fn:1" class="footnote-ref">1</a></sup></p>
+
+<figure>
+  <img src="https://img.example/loop.png" width="800" height="500" alt="The agent loop" srcset="https://img.example/loop-2x.png 2x">
+  <figcaption>A simplified agent loop. (Image source: <a href="https://example.com/src">somewhere</a>)</figcaption>
+</figure>
+
+<h2>Code</h2>
+<p>The harness calls tools in a loop until the model stops asking for them,
+and each tool result is appended to the context before the next generation
+step, which is the entire trick and also the whole difficulty.</p>
+<pre><code class="language-python">def loop(model, tools, ctx):
+    while True:
+        step = model(ctx)
+        if step.done:
+            return step
+        ctx.append(tools[step.name](step.args))
+</code></pre>
+
+<div role="note" aria-label="Tip" class="callout my-4" data-callout-type="tip">
+  <div data-component-part="callout-icon"><svg viewBox="0 0 18 18"><path d="M1 1"/></svg></div>
+  <div><p>Keep the stop condition explicit; implicit stops are where harnesses rot.</p></div>
+</div>
+
+<h2>Math</h2>
+<p>Reward for a trajectory is a discounted sum, written inline as
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="inline" alttext="r_t"><msub><mi>r</mi><mi>t</mi></msub></math>
+and in display form below.</p>
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block" alttext="R = \sum_t \gamma^t r_t">
+  <mi>R</mi><mo>=</mo><munder><mo>&#x2211;</mo><mi>t</mi></munder>
+  <msup><mi>&#x3b3;</mi><mi>t</mi></msup><msub><mi>r</mi><mi>t</mi></msub>
+</math>
+
+<h2>A table and a list</h2>
+<table>
+  <thead><tr><th>Component</th><th>Owner</th></tr></thead>
+  <tbody>
+    <tr><td>Tool loop</td><td>Harness</td></tr>
+    <tr><td>Weights</td><td>Model</td></tr>
+  </tbody>
+</table>
+<ol start="3">
+  <li>Third item, because lists can start anywhere.</li>
+  <li>Fourth item, which the sanitizer must not renumber.</li>
+</ol>
+
+<h2>Media</h2>
+<figure>
+  <video controls width="100%"><source src="https://media.example/demo.mp4" type="video/mp4">Your browser does not support video.</video>
+  <figcaption>A short demo.</figcaption>
+</figure>
+<p><audio controls><source src="https://media.example/sample.wav" type="audio/wav"></audio></p>
+
+<p>Closing thoughts round out the article with a little more prose so the
+extractor has something to score, and so the final chunk is a paragraph
+rather than a media block.<sup id="fnref:2"><a href="#fn:2" class="footnote-ref">2</a></sup></p>
+
+<div class="footnotes">
+  <ol>
+    <li id="fn:1"><p>The word harness is borrowed from equestrian equipment. <a href="#fnref:1" class="footnote-backref">↩</a></p></li>
+    <li id="fn:2"><p>Nothing further. <a href="#fnref:2" class="footnote-backref">↩</a></p></li>
+  </ol>
+</div>
+</article>
+</main>
+<aside class="sidebar"><h3>Related</h3><ul><li><a href="/a">Other post</a></li><li><a href="/b">Another</a></li></ul></aside>
+<footer><p>Copyright 2026 Fixture Log. <a href="/privacy">Privacy</a></p></footer>
+</body>
+</html>

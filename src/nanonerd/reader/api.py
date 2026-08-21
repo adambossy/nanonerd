@@ -72,6 +72,8 @@ def _summary(article: Article, read_words: int) -> ArticleSummary:
         percent_read=_percent(read_words, article.word_count),
         categories=[category.name for category in article.categories],
         added_at=article.added_at,
+        source_kind=article.source_kind,
+        source_url=article.source_url,
         extracted_at=article.extracted_at,
         fidelity_status=article.fidelity_status,
         fidelity_score=article.fidelity_score,

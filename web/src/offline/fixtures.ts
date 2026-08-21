@@ -21,6 +21,8 @@ export function article(overrides: Partial<StoredArticle> = {}): StoredArticle {
     fidelity_status: null,
     fidelity_score: null,
     fidelity_reasons: [],
+    source_kind: null,
+    source_url: null,
     ...overrides,
   };
 }

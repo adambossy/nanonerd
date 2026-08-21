@@ -170,12 +170,6 @@ def drop_duplicate_title(content_html: str, title: str | None) -> str:
     return serialize_children(root)
 
 
-def flatten_blocks(root: HtmlNode) -> None:
-    """Make every direct child of ``root`` a block element with no tail text."""
-    unwrap_containers(root)
-    wrap_inline_runs(root)
-
-
 def unwrap_containers(root: HtmlNode) -> None:
     """Hoist children of wrapper containers (div, section, ...) up to root."""
     while True:

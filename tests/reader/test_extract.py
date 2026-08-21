@@ -6,9 +6,10 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from nanonerd.reader import extract
+from nanonerd.reader import extract, fetch
 from nanonerd.reader.chunking import chunk_html
 from nanonerd.reader.extract import (
+    FetchError,
     NotArticleError,
     _ensure_public_http_url,
     extract_article,
@@ -142,7 +143,7 @@ def test_fetch_html_raises_fetch_error_carrying_status_and_body(monkeypatch):
     input_url = "https://example.com/blocked"
 
     # helper setup
-    monkeypatch.setattr(extract, "_ensure_public_http_url", lambda url: None)
+    monkeypatch.setattr(fetch, "ensure_public_http_url", lambda url: None)
     monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: create_blocked_response())
 
     # act
@@ -328,22 +329,22 @@ def test_extract_article_single_container_fixture_yields_many_chunks():
 
 
 def test_ensure_public_http_url_rejects_file_scheme():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("file:///etc/passwd")
 
 
 def test_ensure_public_http_url_rejects_localhost():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("http://localhost:8000/x")
 
 
 def test_ensure_public_http_url_rejects_loopback_ip():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("http://127.0.0.1/x")
 
 
 def test_ensure_public_http_url_rejects_link_local_metadata_ip():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("http://169.254.169.254/latest/meta-data")
 
 

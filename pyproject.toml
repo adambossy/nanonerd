@@ -11,10 +11,13 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.13",
     "anthropic>=0.40",
+    "boto3>=1.43.76",
     "fastapi>=0.115",
     "httpx>=0.27",
     "lxml>=5.2",
     "nh3>=0.3.6",
+    "pillow>=12.3.0",
+    "playwright>=1.62.0",
     "psycopg[binary]>=3.2",
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.30",
@@ -29,6 +32,9 @@ package-dir = {"nanonerd" = "src/nanonerd"}
 [tool.setuptools.packages.find]
 where = ["src", "."]
 include = ["nanonerd*"]
+
+[tool.setuptools.package-data]
+nanonerd = ["reader/vendor/*.js", "reader/vendor/*.md", "reader/vendor/*LICENSE*"]
 
 [tool.deadcode]
 # NOTE: deadcode matches these patterns against the full relative path with
@@ -91,6 +97,7 @@ ignore-definitions-if-inherits-from = [
 
 [dependency-groups]
 dev = [
+    "boto3-stubs[s3]>=1.43.76",
     "deadcode>=2.4.1",
     "lxml-stubs>=0.5",
     "mypy>=1.18.2",

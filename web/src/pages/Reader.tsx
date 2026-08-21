@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { loadArticle, offline } from "../offline";
 import { fidelityNotice } from "../reader/fidelity";
@@ -6,6 +7,22 @@ import { useReadTracking } from "../reader/useReadTracking";
 import { useReadingSession, type SessionTick } from "../reader/useReadingSession";
 import type { ArticleDetail } from "../types";
 
+const SOURCE_LABELS: Record<string, string> = {
+  archive_ph: "archive.ph copy",
+  wayback: "Wayback Machine copy",
+};
+
+// Footnote refs and backlinks are plain `#nn-…` anchors inside chunk HTML;
+// scroll to them smoothly instead of letting the router see a navigation.
+function jumpToFragment(event: MouseEvent<HTMLElement>) {
+  const anchor = (event.target as HTMLElement).closest("a[href^='#']");
+  if (!(anchor instanceof HTMLAnchorElement)) return;
+  const id = decodeURIComponent(anchor.getAttribute("href")!.slice(1));
+  const target = document.getElementById(id);
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 const RESUME_FAB_FADE_DISTANCE = 120; // px of scroll over which the resume fab fades out
 
 type LoadState = "loading" | "ready" | "unavailable" | "invalid";
@@ -153,7 +170,7 @@ export default function Reader() {
       <div className="reader-progress">
         <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
-      <main className="reader">
+      <main className="reader" onClick={jumpToFragment}>
         <nav className="top-nav" style={{ padding: 0 }}>
           <Link className="brand" to="/library">nano::nerd</Link>
           <span>{Math.round(percent)}%</span>
@@ -165,6 +182,14 @@ export default function Reader() {
             .map((part) => `${part} · `)
             .join("")}
           <a href={article.url}>original</a>
+          {article.source_kind && SOURCE_LABELS[article.source_kind] && (
+            <>
+              {" · "}
+              <a href={article.source_url ?? article.url} className="source-note">
+                {SOURCE_LABELS[article.source_kind]}
+              </a>
+            </>
+          )}
         </p>
         {notice && (
           <p className="fidelity-notice">

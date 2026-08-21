@@ -260,6 +260,68 @@ a { color: inherit; }
 .reader a { overflow-wrap: anywhere; }
 .reader sup, .reader sub { line-height: 0; }
 
+/* Rich-content rules from the Defuddle pipeline: callouts, media, MathML,
+   footnotes, LaTeX fallback. */
+.reader pre.latex { white-space: pre-wrap; text-align: center; }
+.reader blockquote[data-callout] {
+  color: var(--fg);
+  background: var(--card);
+  border-left-color: var(--accent);
+  border-radius: 0 8px 8px 0;
+  padding: 0.7rem 1rem;
+}
+.reader blockquote[data-callout] > :first-child { margin-top: 0; }
+.reader blockquote[data-callout] > :last-child { margin-bottom: 0; }
+.reader blockquote[data-callout] > p:first-child > strong:only-child {
+  color: var(--accent);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.reader blockquote[data-callout="tip"],
+.reader blockquote[data-callout="success"] { border-left-color: #4f8a5b; }
+.reader blockquote[data-callout="tip"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="success"] > p:first-child > strong:only-child { color: #4f8a5b; }
+.reader blockquote[data-callout="warning"],
+.reader blockquote[data-callout="caution"] { border-left-color: #c28a1d; }
+.reader blockquote[data-callout="warning"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="caution"] > p:first-child > strong:only-child { color: #c28a1d; }
+.reader blockquote[data-callout="danger"],
+.reader blockquote[data-callout="error"],
+.reader blockquote[data-callout="bug"] { border-left-color: var(--danger); }
+.reader blockquote[data-callout="danger"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="error"] > p:first-child > strong:only-child,
+.reader blockquote[data-callout="bug"] > p:first-child > strong:only-child { color: var(--danger); }
+
+.reader video, .reader audio {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 1rem auto;
+}
+.reader video { border-radius: 8px; background: #000; }
+
+.reader math { font-size: 1.05em; }
+/* No `display` here: the UA stylesheet's `display: block math` is what lays
+   out mrow/mfrac/msub; overriding it stacks every token vertically. */
+.reader math[display="block"] {
+  overflow-x: auto;
+  margin: 1.2rem 0;
+  text-align: center;
+}
+
+.reader sup a {
+  text-decoration: none;
+  color: var(--accent);
+  padding: 0 0.15rem;
+}
+.reader a.footnote-backref { text-decoration: none; margin-left: 0.3rem; }
+.reader [id^="nn-"] { scroll-margin-top: 1.25rem; }
+.reader li > p { margin: 0.2rem 0; }
+.source-note { color: var(--accent); }
+html { scroll-behavior: smooth; }
+
 .setup { max-width: 42rem; margin: 0 auto; padding: 0.5rem 1rem 3rem; line-height: 1.6; }
 .setup h2 { margin-top: 2rem; font-size: 1.15rem; }
 .setup code {

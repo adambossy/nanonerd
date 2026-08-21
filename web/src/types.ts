@@ -13,6 +13,8 @@ export interface ArticleSummary {
   percent_read: number;
   categories: string[];
   added_at: string;
+  source_kind: "live" | "archive_ph" | "wayback" | null;
+  source_url: string | null;
   extracted_at: string | null;
   fidelity_status: FidelityStatus | null;
   fidelity_score: number | null;

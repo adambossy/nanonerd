@@ -3,7 +3,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from nanonerd.reader import pipeline
-from nanonerd.reader.extract import Extraction, NotArticleError
+from nanonerd.reader.acquire import AcquiredArticle
+from nanonerd.reader.extract import NotArticleError
 from nanonerd.reader.models import Article, Base, Chunk
 from nanonerd.reader.reprocess import reprocess_articles
 
@@ -46,12 +47,19 @@ def fetch_article(factory, article_id):
 def test_reprocess_articles_replaces_chunks_with_fresh_extraction(monkeypatch):
     factory = create_session_factory()
     article_id = create_ready_article(factory, "https://example.com/a")
-    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
     monkeypatch.setattr(
         pipeline,
-        "extract_article",
-        lambda html, url: Extraction(
-            title="New title", author=None, site_name=None, content_html=NEW_CONTENT
+        "acquire_article",
+        lambda url, *, article_id: AcquiredArticle(
+            title="New title",
+            author=None,
+            site_name=None,
+            content_html=NEW_CONTENT,
+            source_kind="live",
+            source_url=url,
+            images_cached=0,
+            http_status=200,
+            source_html="<html>raw</html>",
         ),
     )
     monkeypatch.setattr(pipeline, "assign_categories", lambda *args: [])
@@ -77,12 +85,11 @@ def test_reprocess_articles_replaces_chunks_with_fresh_extraction(monkeypatch):
 def test_reprocess_articles_reports_failures_and_missing_ids(monkeypatch):
     factory = create_session_factory()
     article_id = create_ready_article(factory, "https://example.com/b")
-    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
 
-    def reject(html, url):
+    def reject(url, *, article_id):
         raise NotArticleError("not an article: og:type is product")
 
-    monkeypatch.setattr(pipeline, "extract_article", reject)
+    monkeypatch.setattr(pipeline, "acquire_article", reject)
 
     results = reprocess_articles([article_id, 999], session_factory=factory)
 

@@ -6,10 +6,11 @@ from anthropic import Anthropic
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from nanonerd.reader.acquire import acquire_article
 from nanonerd.reader.categorize import assign_categories
 from nanonerd.reader.chunking import ChunkData, chunk_html, html_to_text
 from nanonerd.reader.db import SessionLocal
-from nanonerd.reader.extract import FetchError, extract_article, fetch_html
+from nanonerd.reader.extract import FetchError, NotArticleError
 from nanonerd.reader.fidelity import Verdict, judge_extraction
 from nanonerd.reader.models import Article, Category, Chunk
 
@@ -98,12 +99,10 @@ def process_article(
         source_html: str | None = None
         http_status: int | None = None
         try:
-            source_html = fetch_html(article.url)
-            http_status = 200
-            extraction = extract_article(source_html, article.url)
-            if extraction is None:
-                raise ValueError("could not extract readable content")
-            chunks = chunk_html(extraction.content_html)
+            acquired = acquire_article(article.url, article_id=article.id)
+            source_html = acquired.source_html
+            http_status = acquired.http_status
+            chunks = chunk_html(acquired.content_html)
             if not chunks:
                 raise ValueError("extracted content produced no chunks")
 
@@ -111,10 +110,12 @@ def process_article(
                 Chunk(position=i, html=c.html, word_count=c.word_count)
                 for i, c in enumerate(chunks)
             ]
-            article.title = extraction.title or article.title or article.url
-            article.author = extraction.author
-            article.site_name = extraction.site_name
-            article.content_html = extraction.content_html
+            article.title = acquired.title or article.title or article.url
+            article.author = acquired.author
+            article.site_name = acquired.site_name
+            article.content_html = acquired.content_html
+            article.source_kind = acquired.source_kind
+            article.source_url = acquired.source_url
             article.word_count = sum(c.word_count for c in chunks)
             article.status = "ready"
             article.error = None
@@ -123,7 +124,7 @@ def process_article(
             logger.warning(
                 "processing failed for article %s", article_id, exc_info=True
             )
-            if isinstance(exc, FetchError):
+            if isinstance(exc, FetchError | NotArticleError):
                 http_status = exc.status_code
                 source_html = exc.body
             session.rollback()
@@ -145,7 +146,7 @@ def process_article(
             article,
             http_status=http_status,
             source_html=source_html,
-            extracted_html=extraction.content_html,
+            extracted_html=acquired.content_html,
             chunks=chunks,
         )
         try:

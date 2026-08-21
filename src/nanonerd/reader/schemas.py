@@ -27,6 +27,8 @@ class ArticleSummary(BaseModel):
     percent_read: float
     categories: list[str]
     added_at: datetime
+    source_kind: str | None = None
+    source_url: str | None = None
     extracted_at: datetime | None
     fidelity_status: str | None
     fidelity_score: float | None

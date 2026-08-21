@@ -1,15 +1,14 @@
 from dataclasses import dataclass
-import ipaddress
-import socket
 from urllib.parse import urlsplit
 
-import httpx
 from lxml import etree
 import trafilatura
 from trafilatura.htmlprocessing import convert_to_html
 from trafilatura.settings import Document
 
 from nanonerd.reader.chunking import chunk_html
+from nanonerd.reader.errors import FetchError
+from nanonerd.reader.fetch import ensure_public_http_url, fetch_html
 from nanonerd.reader.normalize import (
     HtmlNode,
     absolutize_urls,
@@ -17,14 +16,11 @@ from nanonerd.reader.normalize import (
     normalize_content,
     parse_document,
 )
+from nanonerd.reader.render import RenderedPage
 
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 nanonerd-reader/0.1"
-)
-
-_MAX_REDIRECTS = 5
-_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+# Kept under their historical names: the judge CLI, reprocess and tests
+# import the fetch helpers from here.
+_ensure_public_http_url = ensure_public_http_url
 
 # A page with no block of at least this many words is a listing, a captcha
 # wall or a product grid, not prose worth reading.
@@ -44,15 +40,11 @@ _RAW_URL_ATTRIBUTES = (
 
 
 class NotArticleError(ValueError):
-    """The page fetched fine but is not a readable article."""
+    """The page fetched fine but is not a readable article.
 
-
-class FetchError(Exception):
-    """A page could not be fetched, carrying whatever the server did return.
-
-    The fidelity judge needs the status code and body of a refused fetch to
-    tell a bot wall apart from an ordinary outage, so they ride along here
-    instead of being lost inside an httpx exception.
+    `status_code`/`body` carry what was served so the fidelity judge can
+    still see the page; they are optional because the trafilatura path
+    raises before any HTTP context is known.
     """
 
     def __init__(
@@ -69,58 +61,6 @@ class Extraction:
     author: str | None
     site_name: str | None
     content_html: str
-
-
-def _ensure_public_http_url(url: str) -> None:
-    """Reject URLs that could be used to reach non-public network resources."""
-    parsed = urlsplit(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"unsupported URL scheme: {parsed.scheme!r}")
-    host = parsed.hostname
-    if not host:
-        raise ValueError("URL has no hostname")
-
-    try:
-        addrinfo = socket.getaddrinfo(host, None)
-    except OSError as exc:
-        raise ValueError(f"could not resolve host {host!r}: {exc}") from exc
-
-    for _family, _type, _proto, _canonname, sockaddr in addrinfo:
-        addr = str(sockaddr[0])
-        ip = ipaddress.ip_address(addr)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            raise ValueError(f"URL host {host!r} resolves to a non-public address")
-
-
-def fetch_html(url: str) -> str:
-    current = url
-    for _ in range(_MAX_REDIRECTS):
-        _ensure_public_http_url(current)
-        response = httpx.get(
-            current,
-            headers={"User-Agent": USER_AGENT},
-            follow_redirects=False,
-            timeout=20.0,
-        )
-        location = response.headers.get("location")
-        if response.status_code in _REDIRECT_STATUS_CODES and location:
-            current = str(httpx.URL(current).join(location))
-            continue
-        if response.status_code >= 400:
-            raise FetchError(
-                f"HTTP {response.status_code} fetching {current}",
-                status_code=response.status_code,
-                body=response.text,
-            )
-        return response.text
-    raise FetchError("too many redirects")
 
 
 def _clean(value: object) -> str | None:
@@ -214,6 +154,7 @@ def _bare_extract(doc: HtmlNode, base_url: str) -> Document | None:
 
 
 def extract_article(html: str, url: str) -> Extraction | None:
+    """Corpus-style extraction with trafilatura (no browser needed)."""
     doc = _parse_document(html)
     if doc is None:
         return None
@@ -239,3 +180,39 @@ def extract_article(html: str, url: str) -> Extraction | None:
         site_name=_clean(document.sitename),
         content_html=content_html,
     )
+
+
+def extract_rendered(rendered: RenderedPage) -> Extraction | None:
+    """Prefer the in-page Defuddle result; fall back to trafilatura on the DOM.
+
+    The same not-an-article gate applies to both paths: product pages are
+    rejected from the rendered DOM's metadata and listings from the lack of
+    any prose block in the extracted content.
+    """
+    source = rendered.dom_html or rendered.html
+    readable = rendered.readable
+    if readable is None or not readable.content_html.strip():
+        if not source.strip():
+            return None
+        return extract_article(source, rendered.final_url or rendered.url)
+    doc = _parse_document(source)
+    if doc is not None:
+        _reject_non_article_page(doc)
+    _reject_non_prose_content(readable.content_html)
+    return Extraction(
+        title=readable.title,
+        author=readable.author,
+        site_name=readable.site,
+        content_html=readable.content_html,
+    )
+
+
+__all__ = [
+    "Extraction",
+    "FetchError",
+    "NotArticleError",
+    "extract_article",
+    "extract_rendered",
+    "fetch_html",
+    "resolve_base_url",
+]
