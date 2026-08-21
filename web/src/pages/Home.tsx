@@ -1,10 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { listArticles, retryArticle } from "../api";
+import { retryArticle } from "../api";
+import { loadArticleList, offline } from "../offline";
+import { useSyncStatus } from "../offline/useSyncStatus";
 import type { ArticleSummary } from "../types";
 
 function readingMinutes(wordCount: number): number {
   return Math.max(1, Math.round(wordCount / 230));
+}
+
+function SyncChip() {
+  const status = useSyncStatus();
+  if (!status.online) {
+    return (
+      <span className="sync-chip offline" title={status.lastError ?? undefined}>
+        offline{status.unsynced > 0 ? ` · ${status.unsynced} unsynced` : ""}
+      </span>
+    );
+  }
+  if (status.unsynced > 0) {
+    return <span className="sync-chip">{status.unsynced} unsynced</span>;
+  }
+  return null;
 }
 
 function Card({ article, onRetry }: { article: ArticleSummary; onRetry: () => void }) {
@@ -65,28 +82,33 @@ function Card({ article, onRetry }: { article: ArticleSummary; onRetry: () => vo
 
 export default function Home() {
   const [articles, setArticles] = useState<ArticleSummary[] | null>(null);
+  const status = useSyncStatus();
 
-  const refresh = useCallback(() => {
-    listArticles()
+  const reload = useCallback(() => {
+    loadArticleList(offline.store)
       .then(setArticles)
       .catch(() => undefined);
   }, []);
 
+  // Local state first; re-read whenever a sync finishes or status changes.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    reload();
+  }, [reload, status]);
 
+  // Pending articles are being processed server-side; keep pulling while online.
   useEffect(() => {
-    if (!articles?.some((a) => a.status === "pending")) return;
-    const timer = setInterval(refresh, 3000);
+    if (!status.online || !articles?.some((a) => a.status === "pending")) return;
+    const timer = setInterval(() => offline.scheduler.requestSync(), 3000);
     return () => clearInterval(timer);
-  }, [articles, refresh]);
+  }, [articles, status.online]);
 
   return (
     <>
       <nav className="top-nav">
-        <Link className="brand" to="/">nano::nerd</Link>
+        <Link className="brand" to="/library">nano::nerd</Link>
         <span className="nav-links">
+          <SyncChip />
+          <Link to="/history">history</Link>
           <Link to="/stats">stats</Link>
           <Link to="/setup">setup</Link>
         </span>
@@ -104,7 +126,7 @@ export default function Home() {
             onRetry={() => {
               void retryArticle(article.id)
                 .catch(() => undefined)
-                .then(() => refresh());
+                .then(() => offline.scheduler.requestSync());
             }}
           />
         ))}
