@@ -5,20 +5,31 @@ import type { ArticleDetail } from "../types";
 const WORDS_PER_SECOND_CAP = 30; // faster than ~1800 wpm doesn't count as reading
 const FLUSH_INTERVAL_MS = 3000;
 
+/** Where the `[data-chunk-id]` elements live: the document in Reader mode,
+ *  the snapshot's shadow root in Faithful mode (querySelectorAll does not
+ *  pierce shadow boundaries). `null` means "nothing mounted yet". */
+export type ChunkRoot = ParentNode | null;
+
+function chunkElements(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>("[data-chunk-id]"));
+}
+
 export function useReadTracking(
   articleId: number,
   article: ArticleDetail | null,
+  root: ChunkRoot,
 ): Set<number> {
   const [readIds, setReadIds] = useState<Set<number>>(new Set());
   const pendingRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!article) return;
-
     const alreadyRead = new Set(
       article.chunks.filter((c) => c.read).map((c) => c.id),
     );
     setReadIds(new Set(alreadyRead));
+    if (!root) return;
+
     const wordCounts = new Map(article.chunks.map((c) => [c.id, c.word_count]));
     const firstVisibleAt = new Map<number, number>();
     const pending = pendingRef.current;
@@ -60,9 +71,7 @@ export function useReadTracking(
         }
       }
     });
-    document
-      .querySelectorAll("[data-chunk-id]")
-      .forEach((el) => observer.observe(el));
+    chunkElements(root).forEach((el) => observer.observe(el));
 
     // The final chunk of an article can never scroll past the viewport top
     // (its bottom stays in view at max scroll), so it can never satisfy the
@@ -74,8 +83,8 @@ export function useReadTracking(
         window.innerHeight + window.scrollY >=
         document.documentElement.scrollHeight - 4;
       if (!atBottom) return;
-      document.querySelectorAll("[data-chunk-id]").forEach((el) => {
-        const chunkId = Number((el as HTMLElement).dataset.chunkId);
+      chunkElements(root).forEach((el) => {
+        const chunkId = Number(el.dataset.chunkId);
         if (Number.isNaN(chunkId)) return;
         if (el.getBoundingClientRect().top >= window.innerHeight) return;
         if (dwellSatisfied(chunkId)) {
@@ -117,7 +126,7 @@ export function useReadTracking(
       document.removeEventListener("visibilitychange", onVisibilityChange);
       flush();
     };
-  }, [article, articleId]);
+  }, [article, articleId, root]);
 
   return readIds;
 }

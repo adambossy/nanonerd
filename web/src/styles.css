@@ -127,6 +127,45 @@ a { color: inherit; }
   border-radius: 2px;
   background: var(--rail);
 }
+.reader--faithful { padding-bottom: 0.5rem; }
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mode-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+}
+.mode-toggle button.active { background: var(--accent); color: #fff; }
+.snapshot-notice {
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+.snapshot-notice .retry { margin: 0 0 0 0.3rem; }
+.snapshot-wrap { position: relative; }
+.snapshot-host { display: block; }
+.snapshot-rail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.snapshot-rail-mark {
+  position: absolute;
+  left: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--rail);
+}
 .reader img { max-width: 100%; height: auto; }
 .reader pre { overflow-x: auto; font-size: 0.85rem; }
 .reader blockquote { border-left: 3px solid var(--border); margin-left: 0; padding-left: 1rem; color: var(--muted); }

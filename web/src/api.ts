@@ -1,4 +1,9 @@
-import type { ArticleDetail, ArticleSummary, StatsResponse } from "./types";
+import type {
+  ArticleDetail,
+  ArticleSummary,
+  SnapshotState,
+  StatsResponse,
+} from "./types";
 
 async function asJson<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -39,6 +44,17 @@ export function beaconProgress(id: number, chunkIds: number[]): void {
     type: "application/json",
   });
   navigator.sendBeacon(`/api/articles/${id}/progress`, blob);
+}
+
+export async function getSnapshotHtml(id: number): Promise<string> {
+  const response = await fetch(`/api/articles/${id}/snapshot`);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.text();
+}
+
+export async function requestSnapshot(id: number): Promise<SnapshotState> {
+  const response = await fetch(`/api/articles/${id}/snapshot`, { method: "POST" });
+  return asJson<SnapshotState>(response);
 }
 
 export function getStats(): Promise<StatsResponse> {

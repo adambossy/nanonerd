@@ -21,8 +21,17 @@ export interface ChunkData {
   read: boolean;
 }
 
+export interface SnapshotState {
+  status: "none" | "pending" | "ready" | "failed";
+  available: boolean;
+  bytes: number;
+  captured_at: string | null;
+  error: string | null;
+}
+
 export interface ArticleDetail extends ArticleSummary {
   chunks: ChunkData[];
+  snapshot: SnapshotState;
 }
 
 export interface StatsTotals {
