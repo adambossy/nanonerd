@@ -12,7 +12,7 @@ import httpx
 from nanonerd.reader.archive import find_archive_ph_snapshot, find_wayback_snapshot
 from nanonerd.reader.chunking import html_to_text
 from nanonerd.reader.errors import ExtractionError, FetchError, RenderError
-from nanonerd.reader.extract import Extraction, extract_rendered
+from nanonerd.reader.extract import Extraction, NotArticleError, extract_rendered
 from nanonerd.reader.images import cache_images
 from nanonerd.reader.render import RenderedPage, Renderer, RenderMode, renderer_from_env
 from nanonerd.reader.sanitize import sanitize_html
@@ -58,6 +58,10 @@ class AcquiredArticle:
     source_kind: str
     source_url: str
     images_cached: int
+    # What the fidelity judge compares against: the rendered DOM of the page
+    # that was actually extracted (live or archive copy) and its HTTP status.
+    http_status: int | None
+    source_html: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +69,7 @@ class _Sourced:
     extraction: Extraction
     source_kind: str
     source_url: str
+    rendered: RenderedPage
 
 
 def _extraction_words(extraction: Extraction | None) -> int:
@@ -73,14 +78,22 @@ def _extraction_words(extraction: Extraction | None) -> int:
     return len(html_to_text(extraction.content_html).split())
 
 
-def blocked_reason(rendered: RenderedPage, extraction: Extraction | None) -> str | None:
-    """Why this render looks like a bot wall or paywall rather than the article."""
+def _wall_reason(rendered: RenderedPage) -> str | None:
+    """Bot-wall/paywall evidence visible before extracting anything."""
     if rendered.status in _BLOCKED_STATUSES:
         return f"http {rendered.status}"
     haystack = (rendered.dom_html or rendered.html)[:_MARKER_SCAN_BYTES].lower()
     for marker in _BLOCK_MARKERS:
         if marker in haystack:
             return f"marker {marker!r}"
+    return None
+
+
+def blocked_reason(rendered: RenderedPage, extraction: Extraction | None) -> str | None:
+    """Why this render looks like a bot wall or paywall rather than the article."""
+    wall = _wall_reason(rendered)
+    if wall is not None:
+        return wall
     if extraction is None:
         return "no extractable content"
     words = _extraction_words(extraction)
@@ -102,7 +115,17 @@ def _render(
     except (RenderError, FetchError) as exc:
         logger.info("render of %s failed: %s", url, exc)
         return None, None, f"render failed: {exc}"
-    extraction = extract_rendered(rendered)
+    # A captcha page has no prose either; tell the wall apart from a
+    # genuine non-article before the gate gets a say.
+    wall = _wall_reason(rendered)
+    if wall is not None:
+        return rendered, None, wall
+    try:
+        extraction = extract_rendered(rendered)
+    except NotArticleError as exc:
+        raise NotArticleError(
+            str(exc), status_code=rendered.status, body=rendered.dom_html
+        ) from exc
     return rendered, extraction, blocked_reason(rendered, extraction)
 
 
@@ -120,10 +143,13 @@ def _from_archives(
         if snapshot is None:
             logger.info("no %s snapshot for %s", kind, url)
             continue
-        _rendered, extraction, reason = _render(renderer, snapshot, RenderMode.ARCHIVE)
-        if reason is None and extraction is not None:
+        rendered, extraction, reason = _render(renderer, snapshot, RenderMode.ARCHIVE)
+        if reason is None and extraction is not None and rendered is not None:
             return _Sourced(
-                extraction=extraction, source_kind=kind, source_url=snapshot
+                extraction=extraction,
+                source_kind=kind,
+                source_url=snapshot,
+                rendered=rendered,
             )
         logger.info("%s snapshot %s unusable: %s", kind, snapshot, reason)
     return None
@@ -135,7 +161,10 @@ def _extract_with_fallback(
     live, extraction, reason = _render(renderer, url, RenderMode.LIVE)
     if reason is None and extraction is not None and live is not None:
         return _Sourced(
-            extraction=extraction, source_kind=SOURCE_LIVE, source_url=live.final_url
+            extraction=extraction,
+            source_kind=SOURCE_LIVE,
+            source_url=live.final_url,
+            rendered=live,
         )
     logger.info("live render of %s looks blocked (%s); trying archives", url, reason)
     archived = _from_archives(url, renderer=renderer, client=client)
@@ -145,11 +174,16 @@ def _extract_with_fallback(
     # heuristic; with no archive to compare against, the live copy is best.
     if extraction is not None and reason is not None and _is_thin_only(reason) and live:
         return _Sourced(
-            extraction=extraction, source_kind=SOURCE_LIVE, source_url=live.final_url
+            extraction=extraction,
+            source_kind=SOURCE_LIVE,
+            source_url=live.final_url,
+            rendered=live,
         )
-    raise ExtractionError(
-        f"could not extract readable content ({reason}); no usable archive copy"
-    )
+    message = f"could not extract readable content ({reason}); no usable archive copy"
+    if live is None:
+        raise ExtractionError(message)
+    # Carry what the wall served so the fidelity judge can call it "blocked".
+    raise FetchError(message, status_code=live.status, body=live.dom_html)
 
 
 def acquire_article(
@@ -191,4 +225,6 @@ def acquire_article(
         source_kind=sourced.source_kind,
         source_url=sourced.source_url,
         images_cached=cached.cached_count,
+        http_status=sourced.rendered.status,
+        source_html=sourced.rendered.dom_html or sourced.rendered.html,
     )

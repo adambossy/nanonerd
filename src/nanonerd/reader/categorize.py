@@ -21,7 +21,7 @@ existing category names; invent a new name only when nothing existing fits.
 Respond with ONLY a JSON array of category name strings, nothing else."""
 
 
-def _strip_code_fences(raw: str) -> str:
+def strip_code_fences(raw: str) -> str:
     text = raw.strip()
     if text.startswith("```"):
         lines = text.splitlines()
@@ -51,7 +51,7 @@ def assign_categories(
         messages=[{"role": "user", "content": prompt}],
     )
     raw = "".join(block.text for block in response.content if block.type == "text")
-    parsed = json.loads(_strip_code_fences(raw))
+    parsed = json.loads(strip_code_fences(raw))
     if not isinstance(parsed, list):
         raise ValueError(f"expected JSON array of categories, got: {raw!r}")
     names = [str(name).strip() for name in parsed if str(name).strip()]

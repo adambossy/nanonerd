@@ -72,3 +72,15 @@ def fetch_response(
             continue
         return response
     raise FetchError("too many redirects")
+
+
+def fetch_html(url: str) -> str:
+    """GET a page's HTML; a refused fetch raises with the status and body attached."""
+    response = fetch_response(url)
+    if response.status_code >= 400:
+        raise FetchError(
+            f"HTTP {response.status_code} fetching {url}",
+            status_code=response.status_code,
+            body=response.text,
+        )
+    return response.text

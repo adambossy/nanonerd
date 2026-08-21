@@ -1,19 +1,36 @@
 import { useEffect } from "react";
 
 const IDLE_MS = 30_000; // no interaction for this long -> clock stops
-const TICK_MS = 5_000; // accumulate + sync cadence
+const TICK_MS = 5_000; // accumulate + report cadence
 
-export function useReadingSession(articleId: number, ready: boolean): void {
+export interface SessionTick {
+  client_id: string;
+  article_id: number;
+  started_at: string;
+  active_seconds: number;
+}
+
+/**
+ * Measures active reading time for one open of an article and reports it
+ * through `onTick` whenever the whole-second count grows. The session id is
+ * minted on this device so the report is idempotent wherever it lands;
+ * persistence and syncing are the caller's concern.
+ */
+export function useReadingSession(
+  articleId: number,
+  ready: boolean,
+  onTick: (tick: SessionTick) => void,
+): void {
   useEffect(() => {
     if (!ready || !Number.isFinite(articleId)) return;
 
-    let sessionId: number | null = null;
+    // Minted lazily so a session that never accrues time is never reported
+    // (and StrictMode's double mount can't leave a stray zero-second row).
+    let identity: { client_id: string; started_at: string } | null = null;
     let activeMs = 0;
-    let syncedSeconds = 0;
+    let reportedSeconds = 0;
     let lastInteraction = performance.now();
     let lastTick = performance.now();
-    let cancelled = false;
-    let creating = false;
 
     const interact = () => {
       lastInteraction = performance.now();
@@ -28,85 +45,49 @@ export function useReadingSession(articleId: number, ready: boolean): void {
       lastTick = now;
     };
 
-    const body = () =>
-      JSON.stringify({ active_seconds: Math.floor(activeMs / 1000) });
-
-    const sync = () => {
+    const report = () => {
       const seconds = Math.floor(activeMs / 1000);
-      if (seconds <= syncedSeconds) return;
-      if (sessionId === null) {
-        if (creating) return;
-        creating = true;
-        fetch(`/api/articles/${articleId}/sessions`, { method: "POST" })
-          .then((r) => (r.ok ? (r.json() as Promise<{ id: number }>) : null))
-          .then((data) => {
-            if (!cancelled && data) {
-              sessionId = data.id;
-              syncedSeconds = seconds;
-              fetch(`/api/sessions/${sessionId}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: body(),
-              }).catch(() => {
-                syncedSeconds = 0; // retry on a later tick
-              });
-            } else {
-              creating = false; // retry on a later tick
-            }
-          })
-          .catch(() => {
-            creating = false; // retry on a later tick
-          });
-        return;
+      if (seconds <= reportedSeconds) return;
+      if (identity === null) {
+        identity = {
+          client_id: crypto.randomUUID(),
+          started_at: new Date().toISOString(),
+        };
       }
-      syncedSeconds = seconds;
-      fetch(`/api/sessions/${sessionId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: body(),
-      }).catch(() => {
-        syncedSeconds = 0; // retry on a later tick
-      });
-    };
-
-    const beaconSync = () => {
-      accumulate();
-      if (sessionId === null) return;
-      const seconds = Math.floor(activeMs / 1000);
-      if (seconds <= syncedSeconds) return;
-      syncedSeconds = seconds;
-      navigator.sendBeacon(
-        `/api/sessions/${sessionId}`,
-        new Blob([body()], { type: "application/json" }),
-      );
+      reportedSeconds = seconds;
+      onTick({ ...identity, article_id: articleId, active_seconds: seconds });
     };
 
     const onVisibilityChange = () => {
       accumulate();
-      if (document.visibilityState === "hidden") beaconSync();
+      if (document.visibilityState === "hidden") report();
+    };
+    const onPageHide = () => {
+      accumulate();
+      report();
     };
 
     const timer = setInterval(() => {
       accumulate();
-      sync();
+      report();
     }, TICK_MS);
     window.addEventListener("scroll", interact, { passive: true });
     window.addEventListener("mousemove", interact, { passive: true });
     window.addEventListener("keydown", interact, { passive: true });
     window.addEventListener("touchstart", interact, { passive: true });
-    window.addEventListener("pagehide", beaconSync);
+    window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
-      cancelled = true;
       clearInterval(timer);
       window.removeEventListener("scroll", interact);
       window.removeEventListener("mousemove", interact);
       window.removeEventListener("keydown", interact);
       window.removeEventListener("touchstart", interact);
-      window.removeEventListener("pagehide", beaconSync);
+      window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      beaconSync();
+      accumulate();
+      report();
     };
-  }, [articleId, ready]);
+  }, [articleId, ready, onTick]);
 }

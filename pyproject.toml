@@ -19,8 +19,10 @@ dependencies = [
     "pillow>=12.3.0",
     "playwright>=1.62.0",
     "psycopg[binary]>=3.2",
+    "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.30",
     "trafilatura>=2.0",
+    "typer>=0.27.1",
     "uvicorn[standard]>=0.30",
 ]
 
@@ -78,7 +80,10 @@ ignore-names-in-files = [
     "test/**",
     "src/nanonerd/reader/api.py",
     "src/nanonerd/reader/main.py",
+    "src/nanonerd/reader/reprocess.py",
     "src/nanonerd/reader/stats.py",
+    # Typer command functions are referenced by the decorator, not by name.
+    "src/nanonerd/reader/judge.py",
 ]
 ignore-definitions = [
     "Migration",

@@ -1,7 +1,7 @@
 """article source provenance
 
 Revision ID: 8c1f4a2d9e73
-Revises: 136445b6d745
+Revises: a1c7d3e90b42
 Create Date: 2026-08-20 21:50:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = '8c1f4a2d9e73'
-down_revision = '136445b6d745'
+down_revision = 'a1c7d3e90b42'
 branch_labels = None
 depends_on = None
 

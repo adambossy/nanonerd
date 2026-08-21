@@ -3,8 +3,8 @@ import pytest
 
 from nanonerd.reader.acquire import acquire_article, blocked_reason
 from nanonerd.reader.defuddle import ReadableContent
-from nanonerd.reader.errors import ExtractionError, RenderError
-from nanonerd.reader.extract import Extraction
+from nanonerd.reader.errors import ExtractionError, FetchError, RenderError
+from nanonerd.reader.extract import Extraction, NotArticleError
 from nanonerd.reader.render import RenderedPage, RenderMode
 
 URL = "https://news.example/story"
@@ -191,12 +191,15 @@ def test_acquire_article_skips_captcha_walled_archive_and_uses_wayback():
 
 
 def test_acquire_article_accepts_thin_live_copy_when_no_archive_exists():
+    # One real paragraph (clears the prose gate) but far under the 150-word
+    # thin-extraction threshold on a 60 KB page.
+    short_prose = "<p>" + " ".join(f"short{i}" for i in range(40)) + "</p>"
     thin = ReadableContent(
         title="Short",
         author=None,
         site=None,
-        word_count=5,
-        content_html="<p>only a few words here</p>",
+        word_count=40,
+        content_html=short_prose,
     )
     renderer = FakeRenderer(
         {URL: rendered(readable_content=thin, dom_html="<html>" + "x" * 60_000)}
@@ -210,16 +213,14 @@ def test_acquire_article_accepts_thin_live_copy_when_no_archive_exists():
         client=create_client(),
     )
 
-    assert (output.source_kind, output.content_html) == (
-        "live",
-        "<p>only a few words here</p>",
-    )
+    assert (output.source_kind, output.content_html) == ("live", short_prose)
 
 
-def test_acquire_article_raises_when_blocked_everywhere():
-    renderer = FakeRenderer({URL: rendered(status=403)})
+def test_acquire_article_raises_fetch_error_with_wall_when_blocked_everywhere():
+    wall_html = "<html>captcha-delivery.com</html>"
+    renderer = FakeRenderer({URL: rendered(status=403, dom_html=wall_html)})
 
-    with pytest.raises(ExtractionError, match="http 403"):
+    with pytest.raises(FetchError, match="http 403") as raised:
         acquire_article(
             URL,
             article_id=1,
@@ -227,6 +228,58 @@ def test_acquire_article_raises_when_blocked_everywhere():
             storage=NullStorage(),
             client=create_client(),
         )
+    assert (raised.value.status_code, raised.value.body) == (403, wall_html)
+
+
+def test_acquire_article_rejects_product_pages_from_rendered_dom():
+    product_dom = (
+        "<html><head><meta property='og:type' content='product.group'></head>"
+        f"<body>{ARTICLE_HTML}</body></html>"
+    )
+    renderer = FakeRenderer(
+        {URL: rendered(readable_content=readable(), dom_html=product_dom)}
+    )
+
+    with pytest.raises(NotArticleError, match="og:type is product.group") as raised:
+        acquire_article(
+            URL,
+            article_id=1,
+            renderer=renderer,
+            storage=NullStorage(),
+            client=create_client(),
+        )
+    assert (raised.value.status_code, raised.value.body) == (200, product_dom)
+
+
+def test_acquire_article_rejects_listings_without_prose():
+    listing = "".join(f"<p>Product {i} $99</p>" for i in range(40))
+    renderer = FakeRenderer({URL: rendered(readable_content=readable(listing))})
+
+    with pytest.raises(NotArticleError, match="longest block has 3 words"):
+        acquire_article(
+            URL,
+            article_id=1,
+            renderer=renderer,
+            storage=NullStorage(),
+            client=create_client(),
+        )
+
+
+def test_acquire_article_exposes_rendered_dom_and_status_for_the_judge():
+    renderer = FakeRenderer({URL: rendered(readable_content=readable())})
+
+    output = acquire_article(
+        URL,
+        article_id=1,
+        renderer=renderer,
+        storage=NullStorage(),
+        client=create_client(),
+    )
+
+    assert (output.http_status, output.source_html) == (
+        200,
+        f"<html><body>{ARTICLE_HTML}</body></html>",
+    )
 
 
 def test_acquire_article_raises_when_live_render_fails_and_no_archive():

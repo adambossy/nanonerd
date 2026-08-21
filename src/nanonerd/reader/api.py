@@ -1,30 +1,36 @@
 from datetime import UTC, datetime
+import json
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, defer, selectinload
 
 from nanonerd.reader import pipeline
+from nanonerd.reader.chunking import html_to_text
 from nanonerd.reader.db import get_session
 from nanonerd.reader.models import Article, Chunk, ReadingSession
 from nanonerd.reader.schemas import (
     ArticleDetail,
     ArticleSummary,
     ChunkOut,
+    HistoryEntry,
     ProgressRequest,
     ProgressResponse,
+    ResumeTarget,
     SaveRequest,
     SaveResponse,
-    SessionCreated,
     SessionState,
-    SessionUpdate,
+    SessionUpsert,
 )
 from nanonerd.reader.urlnorm import normalize_url
 
 router = APIRouter(prefix="/api")
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+SNIPPET_CHARS = 140
 
 
 def _percent(read_words: int, total_words: int) -> float:
@@ -40,6 +46,16 @@ def _read_words(session: Session, article_id: int) -> int:
         )
     )
     return int(value or 0)
+
+
+def _fidelity_reasons(article: Article) -> list[str]:
+    if not article.fidelity_reasons:
+        return []
+    try:
+        parsed = json.loads(article.fidelity_reasons)
+    except ValueError:
+        return []
+    return [str(reason) for reason in parsed] if isinstance(parsed, list) else []
 
 
 def _summary(article: Article, read_words: int) -> ArticleSummary:
@@ -58,7 +74,49 @@ def _summary(article: Article, read_words: int) -> ArticleSummary:
         added_at=article.added_at,
         source_kind=article.source_kind,
         source_url=article.source_url,
+        extracted_at=article.extracted_at,
+        fidelity_status=article.fidelity_status,
+        fidelity_score=article.fidelity_score,
+        fidelity_reasons=_fidelity_reasons(article),
     )
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _requested_read_times(
+    payload: ProgressRequest, now: datetime
+) -> dict[int, datetime]:
+    """Earliest requested read time per chunk, never later than now."""
+    times = dict.fromkeys(payload.chunk_ids, now)
+    for mark in payload.marks:
+        requested = min(_as_utc(mark.read_at), now)
+        existing = times.get(mark.chunk_id)
+        times[mark.chunk_id] = (
+            requested if existing is None else min(existing, requested)
+        )
+    return times
+
+
+def _apply_read_times(
+    session: Session, article_id: int, times: dict[int, datetime]
+) -> None:
+    """Set read_at to the earliest known time; unknown/foreign ids are ignored."""
+    if not times:
+        return
+    chunks = session.scalars(
+        select(Chunk).where(Chunk.article_id == article_id, Chunk.id.in_(times))
+    ).all()
+    rows = []
+    for chunk in chunks:
+        requested = times[chunk.id]
+        current = _as_utc(chunk.read_at) if chunk.read_at is not None else None
+        if current is None or requested < current:
+            rows.append({"id": chunk.id, "read_at": requested})
+    if rows:
+        session.execute(update(Chunk), rows)
+        session.commit()
 
 
 @router.post("/articles", response_model=SaveResponse)
@@ -118,17 +176,9 @@ def mark_progress(
     article = session.get(Article, article_id)
     if article is None:
         raise HTTPException(status_code=404, detail="article not found")
-    if payload.chunk_ids:
-        session.execute(
-            update(Chunk)
-            .where(
-                Chunk.article_id == article_id,
-                Chunk.id.in_(payload.chunk_ids),
-                Chunk.read_at.is_(None),
-            )
-            .values(read_at=datetime.now(UTC))
-        )
-        session.commit()
+    _apply_read_times(
+        session, article_id, _requested_read_times(payload, datetime.now(UTC))
+    )
     return ProgressResponse(
         percent_read=_percent(_read_words(session, article_id), article.word_count)
     )
@@ -146,31 +196,100 @@ def retry_article(
     session.execute(delete(Chunk).where(Chunk.article_id == article_id))
     article.status = "pending"
     article.error = None
+    article.fidelity_status = None
+    article.fidelity_score = None
+    article.fidelity_reasons = None
+    article.fidelity_checked_at = None
     session.commit()
     background.add_task(pipeline.process_article, article.id)
     return SaveResponse(id=article.id, duplicate=False, status="pending")
 
 
-@router.post("/articles/{article_id}/sessions", response_model=SessionCreated)
-def create_reading_session(article_id: int, session: SessionDep) -> SessionCreated:
-    article = session.get(Article, article_id)
+def _first_resumable(session: Session, article_ids: list[int]) -> Article | None:
+    for article_id in article_ids:
+        article = session.get(Article, article_id)
+        if article is None or article.status != "ready":
+            continue
+        if _read_words(session, article_id) < article.word_count:
+            return article
+    return None
+
+
+def _snippet(html: str) -> str:
+    text = html_to_text(html)
+    if len(text) <= SNIPPET_CHARS:
+        return text
+    return text[:SNIPPET_CHARS].rstrip() + "…"
+
+
+@router.get("/resume", response_model=ResumeTarget | None)
+def get_resume(session: SessionDep) -> ResumeTarget | None:
+    by_session = session.execute(
+        select(ReadingSession.article_id)
+        .group_by(ReadingSession.article_id)
+        .order_by(func.max(ReadingSession.last_active_at).desc())
+    ).scalars()
+    article = _first_resumable(session, list(by_session))
     if article is None:
-        raise HTTPException(status_code=404, detail="article not found")
-    reading = ReadingSession(article_id=article_id)
-    session.add(reading)
-    session.commit()
-    return SessionCreated(id=reading.id)
+        by_chunk = session.execute(
+            select(Chunk.article_id)
+            .where(Chunk.read_at.is_not(None))
+            .group_by(Chunk.article_id)
+            .order_by(func.max(Chunk.read_at).desc())
+        ).scalars()
+        article = _first_resumable(session, list(by_chunk))
+    if article is None:
+        return None
+    return ResumeTarget(article_id=article.id, title=article.title)
 
 
-@router.post("/sessions/{session_id}", response_model=SessionState)
-def update_reading_session(
-    session_id: int, payload: SessionUpdate, session: SessionDep
+@router.get("/history", response_model=list[HistoryEntry])
+def get_history(session: SessionDep, limit: int = 200) -> list[HistoryEntry]:
+    rows = session.execute(
+        select(Chunk, Article.title)
+        .join(Article, Article.id == Chunk.article_id)
+        .where(Chunk.read_at.is_not(None))
+        # Chunks marked in the same batch share a read_at; position breaks the tie.
+        .order_by(Chunk.read_at.desc(), Chunk.position.desc())
+        .limit(limit)
+    ).all()
+    return [
+        HistoryEntry(
+            chunk_id=chunk.id,
+            article_id=chunk.article_id,
+            article_title=title,
+            position=chunk.position,
+            word_count=chunk.word_count,
+            read_at=chunk.read_at,
+            snippet=_snippet(chunk.html),
+        )
+        for chunk, title in rows
+        if chunk.read_at is not None
+    ]
+
+
+@router.put("/sessions/{client_id}", response_model=SessionState)
+def upsert_reading_session(
+    client_id: UUID, payload: SessionUpsert, session: SessionDep
 ) -> SessionState:
-    reading = session.get(ReadingSession, session_id)
+    now = datetime.now(UTC)
+    key = str(client_id)
+    reading = session.scalar(
+        select(ReadingSession).where(ReadingSession.client_id == key)
+    )
     if reading is None:
-        raise HTTPException(status_code=404, detail="session not found")
-    if payload.active_seconds > reading.active_seconds:
+        if session.get(Article, payload.article_id) is None:
+            raise HTTPException(status_code=404, detail="article not found")
+        reading = ReadingSession(
+            client_id=key,
+            article_id=payload.article_id,
+            started_at=min(_as_utc(payload.started_at), now),
+            last_active_at=now,
+            active_seconds=max(0, payload.active_seconds),
+        )
+        session.add(reading)
+    elif payload.active_seconds > reading.active_seconds:
         reading.active_seconds = payload.active_seconds
-        reading.last_active_at = datetime.now(UTC)
-        session.commit()
-    return SessionState(id=reading.id, active_seconds=reading.active_seconds)
+        reading.last_active_at = now
+    session.commit()
+    return SessionState(client_id=key, active_seconds=reading.active_seconds)
