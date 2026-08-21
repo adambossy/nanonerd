@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, defer, selectinload
 
 from nanonerd.reader import pipeline
 from nanonerd.reader.db import get_session
@@ -77,22 +77,17 @@ def save_article(
 
 @router.get("/articles", response_model=list[ArticleSummary])
 def list_articles(session: SessionDep) -> list[ArticleSummary]:
-    articles = session.scalars(
-        select(Article)
-        .options(selectinload(Article.categories))
+    read_words = (
+        select(func.coalesce(func.sum(Chunk.word_count), 0))
+        .where(Chunk.article_id == Article.id, Chunk.read_at.is_not(None))
+        .scalar_subquery()
+    )
+    rows = session.execute(
+        select(Article, read_words)
+        .options(defer(Article.content_html), selectinload(Article.categories))
         .order_by(Article.priority.desc(), Article.added_at.desc())
     ).all()
-    read_by_article: dict[int, int] = {
-        article_id: int(total)
-        for article_id, total in session.execute(
-            select(Chunk.article_id, func.sum(Chunk.word_count))
-            .where(Chunk.read_at.is_not(None))
-            .group_by(Chunk.article_id)
-        ).all()
-    }
-    return [
-        _summary(article, read_by_article.get(article.id, 0)) for article in articles
-    ]
+    return [_summary(article, int(read_total)) for article, read_total in rows]
 
 
 @router.get("/articles/{article_id}", response_model=ArticleDetail)
