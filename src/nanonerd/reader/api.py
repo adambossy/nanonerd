@@ -79,6 +79,7 @@ def save_article(
 def list_articles(session: SessionDep) -> list[ArticleSummary]:
     articles = session.scalars(
         select(Article)
+        .where(Article.archived_at.is_(None))
         .options(selectinload(Article.categories))
         .order_by(Article.priority.desc(), Article.added_at.desc())
     ).all()
@@ -152,6 +153,24 @@ def retry_article(
     session.commit()
     background.add_task(pipeline.process_article, article.id)
     return SaveResponse(id=article.id, duplicate=False, status="pending")
+
+
+@router.post("/articles/{article_id}/archive", status_code=204)
+def archive_article(article_id: int, session: SessionDep) -> None:
+    article = session.get(Article, article_id)
+    if article is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    article.archived_at = datetime.now(UTC)
+    session.commit()
+
+
+@router.delete("/articles/{article_id}", status_code=204)
+def delete_article(article_id: int, session: SessionDep) -> None:
+    article = session.get(Article, article_id)
+    if article is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    session.delete(article)
+    session.commit()
 
 
 @router.post("/articles/{article_id}/sessions", response_model=SessionCreated)

@@ -45,6 +45,9 @@ class Article(Base):
     extracted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="article",

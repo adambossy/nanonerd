@@ -103,3 +103,37 @@ def test_retry_failed_article_requeues(monkeypatch):
     output = client.post(f"/api/articles/{article_id}/retry").json()
 
     assert (output["status"], processed) == ("pending", [article_id])
+
+
+def test_archive_article_hides_it_from_list(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, _chunk_ids = seed_ready_article(factory)
+
+    response = client.post(f"/api/articles/{article_id}/archive")
+
+    assert response.status_code == 204
+    assert client.get("/api/articles").json() == []
+    assert client.get(f"/api/articles/{article_id}").status_code == 200
+
+
+def test_archive_missing_article_returns_404(monkeypatch):
+    client, _factory, _processed = create_test_client(monkeypatch)
+    response = client.post("/api/articles/999/archive")
+    assert response.status_code == 404
+
+
+def test_delete_article_removes_it(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, _chunk_ids = seed_ready_article(factory)
+
+    response = client.delete(f"/api/articles/{article_id}")
+
+    assert response.status_code == 204
+    assert client.get("/api/articles").json() == []
+    assert client.get(f"/api/articles/{article_id}").status_code == 404
+
+
+def test_delete_missing_article_returns_404(monkeypatch):
+    client, _factory, _processed = create_test_client(monkeypatch)
+    response = client.delete("/api/articles/999")
+    assert response.status_code == 404

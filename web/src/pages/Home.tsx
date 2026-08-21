@@ -1,15 +1,78 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { listArticles, retryArticle } from "../api";
+import { archiveArticle, deleteArticle, listArticles, retryArticle } from "../api";
 import type { ArticleSummary } from "../types";
 
 function readingMinutes(wordCount: number): number {
   return Math.max(1, Math.round(wordCount / 230));
 }
 
-function Card({ article, onRetry }: { article: ArticleSummary; onRetry: () => void }) {
+function ArchiveIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
+      <path d="M10 13h4" />
+    </svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16" />
+      <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+      <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+function Card({
+  article,
+  onRetry,
+  onArchive,
+  onDelete,
+}: {
+  article: ArticleSummary;
+  onRetry: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  const actions = (
+    <div className="card-actions">
+      <button
+        type="button"
+        className="icon-btn"
+        title="archive"
+        aria-label="archive article"
+        onClick={(event) => {
+          event.preventDefault();
+          onArchive();
+        }}
+      >
+        <ArchiveIcon />
+      </button>
+      <button
+        type="button"
+        className="icon-btn icon-btn-danger"
+        title="delete"
+        aria-label="delete article"
+        onClick={(event) => {
+          event.preventDefault();
+          if (window.confirm(`Delete "${article.title}"? This can't be undone.`)) {
+            onDelete();
+          }
+        }}
+      >
+        <DeleteIcon />
+      </button>
+    </div>
+  );
   const body = (
     <>
+      {actions}
       <h2>{article.title}</h2>
       <div className="meta">
         {article.site_name && <span>{article.site_name}</span>}
@@ -103,6 +166,16 @@ export default function Home() {
             article={article}
             onRetry={() => {
               void retryArticle(article.id)
+                .catch(() => undefined)
+                .then(() => refresh());
+            }}
+            onArchive={() => {
+              void archiveArticle(article.id)
+                .catch(() => undefined)
+                .then(() => refresh());
+            }}
+            onDelete={() => {
+              void deleteArticle(article.id)
                 .catch(() => undefined)
                 .then(() => refresh());
             }}

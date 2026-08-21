@@ -18,6 +18,16 @@ export async function retryArticle(id: number): Promise<void> {
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 }
 
+export async function archiveArticle(id: number): Promise<void> {
+  const response = await fetch(`/api/articles/${id}/archive`, { method: "POST" });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+}
+
+export async function deleteArticle(id: number): Promise<void> {
+  const response = await fetch(`/api/articles/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+}
+
 export function markProgress(
   id: number,
   chunkIds: number[],
