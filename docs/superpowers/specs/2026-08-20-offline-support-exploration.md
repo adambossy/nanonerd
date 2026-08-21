@@ -1,7 +1,7 @@
 # nano::nerd Reader — Offline Support Exploration
 
 **Date:** 2026-08-20
-**Status:** Approved 2026-08-20 (approach B; decisions recorded at the end)
+**Status:** Implemented 2026-08-20 (approach B; decisions recorded at the end; plan in `docs/superpowers/plans/2026-08-20-offline-support.md`)
 
 Goal as stated: (1) the article list is available offline, (2) articles on
 that list can be read offline, (3) read tracking syncs to the server once
