@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { requestSnapshot } from "../api";
 import { loadArticle, offline } from "../offline";
 import { fidelityNotice } from "../reader/fidelity";
-import { useReadTracking } from "../reader/useReadTracking";
+import { loadReaderMode, saveReaderMode, type ReaderMode } from "../reader/readerMode";
+import { SnapshotView } from "../reader/SnapshotView";
+import { useReadTracking, type ChunkRoot } from "../reader/useReadTracking";
 import { useReadingSession, type SessionTick } from "../reader/useReadingSession";
-import type { ArticleDetail } from "../types";
+import type { ArticleDetail, SnapshotState } from "../types";
 
 const SOURCE_LABELS: Record<string, string> = {
   archive_ph: "archive.ph copy",
@@ -24,8 +27,46 @@ function jumpToFragment(event: MouseEvent<HTMLElement>) {
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 const RESUME_FAB_FADE_DISTANCE = 120; // px of scroll over which the resume fab fades out
+const SNAPSHOT_POLL_MS = 3000;
 
 type LoadState = "loading" | "ready" | "unavailable" | "invalid";
+
+function SnapshotNotice({
+  state,
+  loadError,
+  onCapture,
+}: {
+  state: SnapshotState;
+  loadError: string | null;
+  onCapture: () => void;
+}) {
+  if (loadError) {
+    return (
+      <p className="snapshot-notice">
+        Snapshot failed to load ({loadError}); showing reader view.{" "}
+        <button className="retry" onClick={onCapture}>
+          capture again
+        </button>
+      </p>
+    );
+  }
+  if (state.status === "pending") {
+    return (
+      <p className="snapshot-notice">capturing snapshot… showing reader view.</p>
+    );
+  }
+  return (
+    <p className="snapshot-notice">
+      {state.status === "failed"
+        ? `Snapshot unavailable (${state.error ?? "capture failed"}); `
+        : "No snapshot yet; "}
+      showing reader view.{" "}
+      <button className="retry" onClick={onCapture}>
+        capture snapshot
+      </button>
+    </p>
+  );
+}
 
 export default function Reader() {
   const { id } = useParams();
@@ -38,6 +79,17 @@ export default function Reader() {
   const [article, setArticle] = useState<ArticleDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const [mode, setMode] = useState<ReaderMode>(() => loadReaderMode(articleId));
+  const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
+  const [snapshotLoadError, setSnapshotLoadError] = useState<string | null>(null);
+  const scrolledForRef = useRef<number | null>(null);
+
+  const snapshot = article?.snapshot ?? null;
+  const faithful =
+    mode === "faithful" && !!snapshot?.available && snapshotLoadError === null;
+  // Read tracking watches whichever DOM holds the chunks; persistence below
+  // is the same offline path in both modes.
+  const chunkRoot: ChunkRoot = faithful ? shadowRoot : document;
 
   // Persist at event time so nothing is lost if the tab closes; sync soon after.
   const onRead = useCallback(
@@ -62,7 +114,7 @@ export default function Reader() {
       .then(() => offline.scheduler.requestSync());
   }, []);
 
-  const readIds = useReadTracking(article, onRead);
+  const readIds = useReadTracking(article, chunkRoot, onRead);
   useReadingSession(articleId, article !== null, onTick);
   const resumeBaselineRef = useRef<number | null>(null);
 
@@ -116,16 +168,34 @@ export default function Reader() {
     };
   }, [articleId]);
 
-  // Open at the requested chunk, otherwise at the earliest unread chunk.
+  // While a capture is running, sync until it settles: a finished capture
+  // bumps extracted_at, so the sync refetches the rebuilt chunks.
   useEffect(() => {
-    if (!article) return;
+    if (snapshot?.status !== "pending") return;
+    const timer = setInterval(() => {
+      void offline.scheduler
+        .syncNow()
+        .then(() => loadArticle(offline.store, articleId))
+        .then((next) => {
+          if (next && next.snapshot.status !== "pending") setArticle(next);
+        })
+        .catch(() => undefined);
+    }, SNAPSHOT_POLL_MS);
+    return () => clearInterval(timer);
+  }, [articleId, snapshot?.status]);
+
+  // Open at the requested chunk, otherwise at the earliest unread chunk
+  // (once per article, once the chunk elements exist in `chunkRoot`).
+  useEffect(() => {
+    if (!article || !chunkRoot || scrolledForRef.current === articleId) return;
+    scrolledForRef.current = articleId;
     if (targetChunk) {
-      document.querySelector(`[data-chunk-id="${targetChunk}"]`)?.scrollIntoView();
+      chunkRoot.querySelector(`[data-chunk-id="${targetChunk}"]`)?.scrollIntoView();
       return;
     }
     const firstUnread = article.chunks.find((c) => !c.read);
     if (firstUnread && firstUnread.position > 0) {
-      document
+      chunkRoot
         .querySelector(`[data-chunk-id="${firstUnread.id}"]`)
         ?.scrollIntoView();
     }
@@ -134,7 +204,7 @@ export default function Reader() {
         resumeBaselineRef.current = window.scrollY;
       });
     }
-  }, [article, targetChunk, resumed]);
+  }, [article, articleId, chunkRoot, targetChunk, resumed]);
 
   const percent = useMemo(() => {
     if (!article) return 0;
@@ -145,6 +215,28 @@ export default function Reader() {
       .reduce((sum, c) => sum + c.word_count, 0);
     return (100 * read) / total;
   }, [article, readIds]);
+
+  const switchMode = (next: ReaderMode) => {
+    setMode(next);
+    saveReaderMode(articleId, next);
+    setSnapshotLoadError(null);
+  };
+
+  const captureSnapshot = () => {
+    requestSnapshot(articleId)
+      .then((next) => {
+        setArticle((prev) => (prev ? { ...prev, snapshot: next } : prev));
+        offline.scheduler.requestSync();
+      })
+      .catch(() => setSnapshotLoadError("could not start capture"));
+  };
+
+  const handleSnapshotMount = useCallback((root: ShadowRoot | null) => {
+    setShadowRoot(root);
+  }, []);
+  const handleSnapshotError = useCallback((message: string) => {
+    setSnapshotLoadError(message);
+  }, []);
 
   if (state === "invalid" || state === "unavailable") {
     return (
@@ -163,55 +255,93 @@ export default function Reader() {
     return <main className="reader">loading…</main>;
   }
 
-  const notice = noticeDismissed ? null : fidelityNotice(article);
+  const notice = noticeDismissed || faithful ? null : fidelityNotice(article);
+  const snapshotNotice =
+    mode === "faithful" && !faithful ? (
+      <SnapshotNotice
+        state={article.snapshot}
+        loadError={snapshotLoadError}
+        onCapture={captureSnapshot}
+      />
+    ) : null;
 
   return (
     <>
       <div className="reader-progress">
         <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
-      <main className="reader" onClick={jumpToFragment}>
+      <main
+        className={faithful ? "reader reader--faithful" : "reader"}
+        onClick={jumpToFragment}
+      >
         <nav className="top-nav" style={{ padding: 0 }}>
           <Link className="brand" to="/library">nano::nerd</Link>
+          <span className="mode-toggle" role="group" aria-label="view mode">
+            <button
+              className={mode === "reader" ? "active" : undefined}
+              onClick={() => switchMode("reader")}
+            >
+              reader
+            </button>
+            <button
+              className={mode === "faithful" ? "active" : undefined}
+              onClick={() => switchMode("faithful")}
+            >
+              faithful
+            </button>
+          </span>
           <span>{Math.round(percent)}%</span>
         </nav>
-        <h1 className="article-title">{article.title}</h1>
-        <p className="byline">
-          {[article.site_name, article.author]
-            .filter(Boolean)
-            .map((part) => `${part} · `)
-            .join("")}
-          <a href={article.url}>original</a>
-          {article.source_kind && SOURCE_LABELS[article.source_kind] && (
-            <>
-              {" · "}
-              <a href={article.source_url ?? article.url} className="source-note">
-                {SOURCE_LABELS[article.source_kind]}
-              </a>
-            </>
-          )}
-        </p>
-        {notice && (
-          <p className="fidelity-notice">
-            <span>{notice}</span>
-            <button
-              className="fidelity-dismiss"
-              aria-label="dismiss"
-              onClick={() => setNoticeDismissed(true)}
-            >
-              ×
-            </button>
-          </p>
+        {snapshotNotice}
+        {!faithful && (
+          <>
+            <h1 className="article-title">{article.title}</h1>
+            <p className="byline">
+              {[article.site_name, article.author]
+                .filter(Boolean)
+                .map((part) => `${part} · `)
+                .join("")}
+              <a href={article.url}>original</a>
+              {article.source_kind && SOURCE_LABELS[article.source_kind] && (
+                <>
+                  {" · "}
+                  <a href={article.source_url ?? article.url} className="source-note">
+                    {SOURCE_LABELS[article.source_kind]}
+                  </a>
+                </>
+              )}
+            </p>
+            {notice && (
+              <p className="fidelity-notice">
+                <span>{notice}</span>
+                <button
+                  className="fidelity-dismiss"
+                  aria-label="dismiss"
+                  onClick={() => setNoticeDismissed(true)}
+                >
+                  ×
+                </button>
+              </p>
+            )}
+            {article.chunks.map((chunk) => (
+              <section
+                key={chunk.id}
+                data-chunk-id={chunk.id}
+                className={readIds.has(chunk.id) ? "read" : undefined}
+                dangerouslySetInnerHTML={{ __html: chunk.html }}
+              />
+            ))}
+          </>
         )}
-        {article.chunks.map((chunk) => (
-          <section
-            key={chunk.id}
-            data-chunk-id={chunk.id}
-            className={readIds.has(chunk.id) ? "read" : undefined}
-            dangerouslySetInnerHTML={{ __html: chunk.html }}
-          />
-        ))}
       </main>
+      {faithful && (
+        <SnapshotView
+          articleId={articleId}
+          readIds={readIds}
+          onMount={handleSnapshotMount}
+          onError={handleSnapshotError}
+        />
+      )}
       {resumed && (
         <Link
           className="resume-fab"

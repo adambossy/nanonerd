@@ -1,5 +1,13 @@
 export type FidelityStatus = "ok" | "degraded" | "not_article" | "blocked";
 
+export interface SnapshotState {
+  status: "none" | "pending" | "ready" | "failed";
+  available: boolean;
+  bytes: number;
+  captured_at: string | null;
+  error: string | null;
+}
+
 export interface ArticleSummary {
   id: number;
   title: string;
@@ -19,6 +27,8 @@ export interface ArticleSummary {
   fidelity_status: FidelityStatus | null;
   fidelity_score: number | null;
   fidelity_reasons: string[];
+  // Travels with the summary so the offline list refresh sees capture progress.
+  snapshot: SnapshotState;
 }
 
 export interface ChunkData {

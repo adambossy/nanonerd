@@ -13,6 +13,7 @@ from nanonerd.reader.db import SessionLocal
 from nanonerd.reader.extract import FetchError, NotArticleError
 from nanonerd.reader.fidelity import Verdict, judge_extraction
 from nanonerd.reader.models import Article, Category, Chunk
+from nanonerd.reader.snapshot.service import discard_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,8 @@ def process_article(
                 Chunk(position=i, html=c.html, word_count=c.word_count)
                 for i, c in enumerate(chunks)
             ]
+            # Fresh chunks orphan any faithful snapshot captured earlier.
+            discard_snapshot(article)
             article.title = acquired.title or article.title or article.url
             article.author = acquired.author
             article.site_name = acquired.site_name

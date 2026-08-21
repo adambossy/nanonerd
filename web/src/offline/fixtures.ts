@@ -23,6 +23,7 @@ export function article(overrides: Partial<StoredArticle> = {}): StoredArticle {
     fidelity_reasons: [],
     source_kind: null,
     source_url: null,
+    snapshot: { status: "none", available: false, bytes: 0, captured_at: null, error: null },
     ...overrides,
   };
 }

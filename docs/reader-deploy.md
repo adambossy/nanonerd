@@ -60,6 +60,22 @@ needs; objects are then served from `https://<bucket>.fly.storage.tigris.dev`.
 Override with `MEDIA_S3_BUCKET`, `MEDIA_S3_ENDPOINT` and
 `MEDIA_PUBLIC_BASE_URL` for any other S3-compatible store.
 
+### Faithful-mode snapshots (Chromium)
+
+Snapshot capture (`POST /api/articles/{id}/snapshot`) reuses the Chromium
+shipped in the Playwright base image, so there is nothing extra to install.
+Captures run one page at a time inside the uvicorn process (a module-level
+lock in `snapshot/capture.py`); article extraction launches its own Chromium
+per save and is not serialized against captures, so a save landing during a
+capture briefly runs two browsers — fine at `memory = "1gb"`, not at 256MB.
+Snapshot capture is opt-in (on demand from the reader); nothing is captured
+automatically.
+
+Snapshots are stored in Postgres (`article_snapshots`, ≤8MB each) — no
+object storage to configure. Capturing one rebuilds the article's chunks
+from the snapshot's blocks and bumps `extracted_at`, so offline clients
+refetch the body.
+
 ## 3. Wire up the save surfaces
 
 Open `https://nanonerd-reader.fly.dev/setup` and re-grab the bookmarklet and

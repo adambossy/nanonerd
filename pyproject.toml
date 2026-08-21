@@ -34,7 +34,13 @@ where = ["src", "."]
 include = ["nanonerd*"]
 
 [tool.setuptools.package-data]
-nanonerd = ["reader/vendor/*.js", "reader/vendor/*.md", "reader/vendor/*LICENSE*"]
+# Vendored Defuddle bundle plus the in-page scripts the snapshot capture evaluates.
+nanonerd = [
+    "reader/vendor/*.js",
+    "reader/vendor/*.md",
+    "reader/vendor/*LICENSE*",
+    "reader/snapshot/*.js",
+]
 
 [tool.deadcode]
 # NOTE: deadcode matches these patterns against the full relative path with
@@ -98,6 +104,7 @@ ignore-definitions-if-inherits-from = [
 [dependency-groups]
 dev = [
     "boto3-stubs[s3]>=1.43.76",
+    "cssselect>=1.5.0",
     "deadcode>=2.4.1",
     "lxml-stubs>=0.5",
     "mypy>=1.18.2",

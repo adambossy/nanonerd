@@ -9,7 +9,7 @@ from nanonerd.reader import pipeline
 from nanonerd.reader.acquire import AcquiredArticle
 from nanonerd.reader.errors import ExtractionError
 from nanonerd.reader.extract import FetchError, NotArticleError
-from nanonerd.reader.models import Article, Base, Category
+from nanonerd.reader.models import Article, ArticleSnapshot, Base, Category, Chunk
 
 CONTENT_HTML = (
     "<p>" + " ".join(f"alpha{i}" for i in range(180)) + "</p>"
@@ -113,6 +113,47 @@ def test_process_article_success(monkeypatch):
         "source_kind": "wayback",
         "source_url": "https://example.com/a",
     }
+    assert output == expected_output
+
+
+def create_article_with_snapshot(factory):
+    with factory() as session:
+        article = Article(
+            url="https://example.com/snap",
+            title="Snap",
+            status="pending",
+            snapshot_status="ready",
+            snapshot_available=True,
+            snapshot_bytes=42,
+            chunks=[Chunk(position=0, html="<p>old</p>", word_count=1)],
+        )
+        article.snapshot = ArticleSnapshot(html="<html><body>old</body></html>")
+        session.add(article)
+        session.commit()
+        return article.id
+
+
+def fetch_snapshot_state(factory, article_id):
+    with factory() as session:
+        article = session.get(Article, article_id)
+        return {
+            "status": article.snapshot_status,
+            "available": article.snapshot_available,
+            "bytes": article.snapshot_bytes,
+            "row": session.get(ArticleSnapshot, article_id) is not None,
+        }
+
+
+def test_process_article_discards_stale_snapshot(monkeypatch):
+    factory = create_session_factory()
+    article_id = create_article_with_snapshot(factory)
+    patch_acquire(monkeypatch, acquired())
+    monkeypatch.setattr(pipeline, "assign_categories", lambda title, text, existing: [])
+
+    pipeline.process_article(article_id, session_factory=factory)
+
+    output = fetch_snapshot_state(factory, article_id)
+    expected_output = {"status": "none", "available": False, "bytes": 0, "row": False}
     assert output == expected_output
 
 

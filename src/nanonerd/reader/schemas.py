@@ -14,6 +14,14 @@ class SaveResponse(BaseModel):
     status: str
 
 
+class SnapshotState(BaseModel):
+    status: str
+    available: bool
+    bytes: int
+    captured_at: datetime | None
+    error: str | None
+
+
 class ArticleSummary(BaseModel):
     id: int
     title: str
@@ -33,6 +41,9 @@ class ArticleSummary(BaseModel):
     fidelity_status: str | None
     fidelity_score: float | None
     fidelity_reasons: list[str]
+    # Faithful-snapshot state travels with the summary so offline clients see
+    # capture progress on every list refresh.
+    snapshot: SnapshotState
 
 
 class ChunkOut(BaseModel):

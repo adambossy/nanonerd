@@ -8,6 +8,7 @@ from nanonerd.reader import pipeline
 from nanonerd.reader.api import router
 from nanonerd.reader.db import get_session
 from nanonerd.reader.models import Base
+from nanonerd.reader.snapshot import service as snapshot_service
 from nanonerd.reader.stats import router as stats_router
 
 
@@ -31,5 +32,10 @@ def create_test_client(monkeypatch):
     processed = []
     monkeypatch.setattr(
         pipeline, "process_article", lambda article_id: processed.append(article_id)
+    )
+    monkeypatch.setattr(
+        snapshot_service,
+        "capture_snapshot",
+        lambda article_id: processed.append(("snapshot", article_id)),
     )
     return TestClient(app), factory, processed
