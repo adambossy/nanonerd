@@ -1,7 +1,7 @@
 # nano::nerd Reader — Offline Support Exploration
 
 **Date:** 2026-08-20
-**Status:** Exploration (not approved; nothing implemented)
+**Status:** Approved 2026-08-20 (approach B; decisions recorded at the end)
 
 Goal as stated: (1) the article list is available offline, (2) articles on
 that list can be read offline, (3) read tracking syncs to the server once
@@ -335,18 +335,23 @@ Phases 1 and 2 are independently shippable; 1 alone already satisfies
 "list + read offline", and the existing in-memory requeue keeps working
 online.
 
-## Questions to settle before building
+## Decisions (2026-08-20)
 
-1. **Prefetch everything vs. opt-in "download".** I assumed everything
-   (text-only, ~32 KB each). If you expect thousands of articles or images
-   later, revisit.
-2. **Drop the old session endpoints** or keep them alongside the upsert?
-   Single-user, nothing else calls them — I'd drop them in the same change.
-3. **Earliest-wins `read_at`** (proposed) vs. keep server `now()` at first
-   write. Earliest-wins is the only choice that makes offline reads land on
-   the right day if a per-day "words read" chart is ever added; cost is one
-   `LEAST()`.
-4. **How much sync status to surface** — a single "offline · 2 unsynced"
-   chip on Home is probably the right amount.
-5. Whether to bring up `vitest` now. The merge/percent-overlay logic is
-   exactly the kind of thing that benefits from a table test.
+1. **Prefetch everything.** Every `ready` article body is downloaded when
+   the app is online; no opt-in.
+2. **Drop the old session endpoints.** `POST /articles/{id}/sessions` and
+   `POST /sessions/{id}` are removed in favor of the idempotent
+   `PUT /sessions/{client_id}` upsert.
+3. **Earliest `read_at` wins.** Server stores
+   `LEAST(COALESCE(read_at, ts), ts)`, clamped to `now()`.
+4. **Sync status UI:** one chip on Home — "offline" / "n unsynced".
+5. **vitest now.** The sync layer ships with unit tests; merge/overlay
+   logic is table-tested.
+6. **Stats page is out of scope for offline.** It stays network-only and
+   shows a "needs connection" message when the fetch fails.
+7. **Separation of concerns (explicit requirement):** the sync code lives in
+   `web/src/offline/` behind small interfaces — a `LocalStore` (IndexedDB
+   persistence), a `SyncApi` (HTTP transport), and a pure `Syncer` that
+   drains the outbox using those two. Hooks and pages depend only on the
+   store/syncer interfaces, never on IndexedDB or `fetch` directly, and the
+   syncer never imports React.
