@@ -23,6 +23,20 @@ fly deploy
 The container runs `alembic upgrade head` on boot, so the schema is created
 on first deploy.
 
+### Faithful-mode snapshots (Chromium)
+
+The image installs headless Chromium (`playwright install --with-deps
+chromium`, ~400MB). Snapshot capture runs one page at a time inside the
+uvicorn process; on a 256MB machine Chromium will be OOM-killed. Before
+using the feature in production, bump the machine:
+
+```bash
+fly scale memory 1024 -a nanonerd-reader   # or uncomment memory = "1gb" in fly.toml
+```
+
+Snapshots are stored in Postgres (`article_snapshots`, ≤8MB each) — no
+object storage to configure.
+
 ## 3. Wire up the save surfaces
 
 Open `https://nanonerd-reader.fly.dev/setup` and re-grab the bookmarklet and
