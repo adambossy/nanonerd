@@ -60,6 +60,10 @@ ignore-names = [
     # back by any current code path, but is a real schema field kept for
     # observability/future use, not dead code.
     "extracted_at",
+    # Updated on every sync tick to track session liveness; not read back by
+    # any current code path, but a real schema field kept for
+    # observability/future use, not dead code.
+    "last_active_at",
 ]
 ignore-names-in-files = [
     "*/__init__.py",

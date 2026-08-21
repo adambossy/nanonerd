@@ -86,7 +86,10 @@ export default function Home() {
     <>
       <nav className="top-nav">
         <Link className="brand" to="/">nano::nerd</Link>
-        <Link to="/setup">setup</Link>
+        <span className="nav-links">
+          <Link to="/stats">stats</Link>
+          <Link to="/setup">setup</Link>
+        </span>
       </nav>
       <main className="home">
         {articles?.length === 0 && (

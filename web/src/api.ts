@@ -1,4 +1,4 @@
-import type { ArticleDetail, ArticleSummary } from "./types";
+import type { ArticleDetail, ArticleSummary, StatsResponse } from "./types";
 
 async function asJson<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -39,4 +39,8 @@ export function beaconProgress(id: number, chunkIds: number[]): void {
     type: "application/json",
   });
   navigator.sendBeacon(`/api/articles/${id}/progress`, blob);
+}
+
+export function getStats(): Promise<StatsResponse> {
+  return fetch("/api/stats").then((r) => asJson<StatsResponse>(r));
 }

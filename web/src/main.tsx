@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home";
 import Reader from "./pages/Reader";
 import Setup from "./pages/Setup";
+import Stats from "./pages/Stats";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -16,6 +17,7 @@ createRoot(rootElement).render(
         <Route path="/" element={<Home />} />
         <Route path="/read/:id" element={<Reader />} />
         <Route path="/setup" element={<Setup />} />
+        <Route path="/stats" element={<Stats />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
