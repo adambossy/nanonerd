@@ -68,6 +68,7 @@ def fetch_state(factory, article_id):
                 for c in article.chunks
             ],
             "snapshot_bytes": article.snapshot_bytes,
+            "captured_at_set": article.snapshot_captured_at is not None,
             "ids_in_html": None
             if snapshot is None
             else [f'data-chunk-id="{c.id}"' in snapshot.html for c in article.chunks],
@@ -90,6 +91,7 @@ def test_capture_snapshot_replaces_chunks_and_stores_tagged_html():
         "word_count": 10,
         "chunks": [(0, 2, False), (1, 4, False), (2, 4, False)],
         "ids_in_html": [True, True, True],
+        "captured_at_set": True,
     }
     assert output == expected_output
 
@@ -121,6 +123,7 @@ def test_capture_snapshot_records_failure_reason():
         "chunks": [(0, 4, False), (1, 4, False)],
         "snapshot_bytes": 0,
         "ids_in_html": None,
+        "captured_at_set": False,
     }
     assert output == expected_output
 

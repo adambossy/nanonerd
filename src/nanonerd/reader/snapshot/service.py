@@ -82,7 +82,6 @@ def _store(session: Session, article: Article, build: SnapshotBuild) -> None:
     _replace_chunks(article, build.chunks)
     session.flush()  # assigns chunk ids
     html = attach_chunk_ids(build.html, [chunk.id for chunk in article.chunks])
-    datetime.now(UTC)
     if article.snapshot is None:
         article.snapshot = ArticleSnapshot(html=html)
     else:
@@ -90,6 +89,7 @@ def _store(session: Session, article: Article, build: SnapshotBuild) -> None:
     article.snapshot_status = "ready"
     article.snapshot_available = True
     article.snapshot_bytes = len(html.encode("utf-8"))
+    article.snapshot_captured_at = datetime.now(UTC)
     article.snapshot_error = None
 
 

@@ -85,21 +85,63 @@ async () => {
     if (raw && !raw.startsWith("data:") && !raw.startsWith("blob:")) el.setAttribute("src", abs(raw));
   }
 
-  // 4. Remove executable / non-renderable nodes and anything display:none.
+  // 4. Remove executable / non-renderable nodes, anything display:none, and
+  //    fixed overlays (drawers, cookie bars, sticky headers). Sticky elements
+  //    keep their content but lose the stickiness.
   const hidden = [];
+  const fixed = [];
+  let scroller = null;
   for (const el of doc.body ? doc.body.querySelectorAll("*") : []) {
     if (el.closest("svg") || el.tagName === "STYLE" || el.tagName === "LINK") continue;
-    let display = "";
+    let style = null;
     try {
-      display = getComputedStyle(el).display;
+      style = getComputedStyle(el);
     } catch {
-      display = "";
+      continue;
     }
-    if (display === "none") hidden.push(el);
+    if (style.display === "none") {
+      hidden.push(el);
+      continue;
+    }
+    if (style.position === "fixed") {
+      fixed.push(el);
+    } else if (style.position === "sticky") {
+      el.style.setProperty("position", "static", "important");
+    }
+    // App-shell layouts scroll the article inside a fixed-height pane. Our
+    // progress tracking (and the phone's scrolling) expects document flow,
+    // so remember the dominant vertical scroller and flatten it below.
+    const overflowY = style.overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      el.scrollHeight > el.clientHeight + 40 &&
+      el.clientHeight >= window.innerHeight * 0.4 &&
+      (!scroller || el.scrollHeight > scroller.scrollHeight)
+    ) {
+      scroller = el;
+    }
   }
   for (const el of hidden) {
     if (el.isConnected) el.remove();
   }
+  for (const el of fixed) {
+    if (el.isConnected && !el.contains(scroller)) el.remove();
+  }
+  const flatten = (el) => {
+    el.style.setProperty("height", "auto", "important");
+    el.style.setProperty("max-height", "none", "important");
+    el.style.setProperty("min-height", "0", "important");
+    el.style.setProperty("overflow", "visible", "important");
+  };
+  if (scroller) {
+    let node = scroller;
+    while (node && node !== doc.documentElement) {
+      flatten(node);
+      node = node.parentElement;
+    }
+  }
+  flatten(doc.documentElement);
+  if (doc.body) flatten(doc.body);
   for (const el of doc.querySelectorAll("script, noscript, iframe, frame, object, embed, template, base")) {
     el.remove();
   }
