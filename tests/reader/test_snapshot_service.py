@@ -154,3 +154,19 @@ def test_capture_snapshot_refuses_private_urls():
 
     output = fetch_state(factory, article_id)
     assert (output["status"], "non-public" in output["error"]) == ("failed", True)
+
+
+def fetch_extracted_at(factory, article_id):
+    with factory() as session:
+        return session.get(Article, article_id).extracted_at
+
+
+def test_capture_snapshot_bumps_extracted_at():
+    factory = create_session_factory()
+    article_id = create_article(factory)
+    before = fetch_extracted_at(factory, article_id)
+
+    service.capture_snapshot(article_id, session_factory=factory, capture=fake_capture)
+
+    output = (before, fetch_extracted_at(factory, article_id) is not None)
+    assert output == (None, True)

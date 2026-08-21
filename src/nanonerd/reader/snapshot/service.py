@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from nanonerd.reader.chunking import ChunkData, html_to_text
 from nanonerd.reader.db import SessionLocal
-from nanonerd.reader.extract import _ensure_public_http_url
+from nanonerd.reader.fetch import ensure_public_http_url
 from nanonerd.reader.models import Article, ArticleSnapshot, Chunk
 from nanonerd.reader.snapshot.build import (
     BuildLimits,
@@ -86,10 +86,26 @@ def _store(session: Session, article: Article, build: SnapshotBuild) -> None:
         article.snapshot = ArticleSnapshot(html=html)
     else:
         article.snapshot.html = html
+    now = datetime.now(UTC)
     article.snapshot_status = "ready"
     article.snapshot_available = True
     article.snapshot_bytes = len(html.encode("utf-8"))
-    article.snapshot_captured_at = datetime.now(UTC)
+    article.snapshot_captured_at = now
+    article.snapshot_error = None
+    # Chunk ids changed: offline clients version cached bodies by extracted_at,
+    # so bumping it makes them refetch instead of holding stale chunk ids.
+    article.extracted_at = now
+
+
+def discard_snapshot(article: Article) -> None:
+    """Drop the stored snapshot and reset its markers; used whenever the
+    article's chunks are rebuilt by the regular extraction pipeline (retry,
+    reprocess), since the snapshot's chunk tags would point at dead ids."""
+    article.snapshot = None
+    article.snapshot_status = "none"
+    article.snapshot_available = False
+    article.snapshot_bytes = 0
+    article.snapshot_captured_at = None
     article.snapshot_error = None
 
 
@@ -118,7 +134,7 @@ def capture_snapshot(
             return
         url, title = article.url, article.title
         try:
-            _ensure_public_http_url(url)
+            ensure_public_http_url(url)
             captured = capture(url)
             build = _build_within_budget(captured, title)
             if not build.chunks:

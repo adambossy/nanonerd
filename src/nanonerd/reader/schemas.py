@@ -14,6 +14,14 @@ class SaveResponse(BaseModel):
     status: str
 
 
+class SnapshotState(BaseModel):
+    status: str
+    available: bool
+    bytes: int
+    captured_at: datetime | None
+    error: str | None
+
+
 class ArticleSummary(BaseModel):
     id: int
     title: str
@@ -27,6 +35,15 @@ class ArticleSummary(BaseModel):
     percent_read: float
     categories: list[str]
     added_at: datetime
+    source_kind: str | None = None
+    source_url: str | None = None
+    extracted_at: datetime | None
+    fidelity_status: str | None
+    fidelity_score: float | None
+    fidelity_reasons: list[str]
+    # Faithful-snapshot state travels with the summary so offline clients see
+    # capture progress on every list refresh.
+    snapshot: SnapshotState
 
 
 class ChunkOut(BaseModel):
@@ -37,38 +54,48 @@ class ChunkOut(BaseModel):
     read: bool
 
 
-class SnapshotState(BaseModel):
-    status: str
-    available: bool
-    bytes: int
-    captured_at: datetime | None
-    error: str | None
-
-
 class ArticleDetail(ArticleSummary):
     chunks: list[ChunkOut]
-    snapshot: SnapshotState
+
+
+class ReadMark(BaseModel):
+    chunk_id: int
+    read_at: datetime
 
 
 class ProgressRequest(BaseModel):
-    chunk_ids: list[int]
+    chunk_ids: list[int] = []
+    marks: list[ReadMark] = []
 
 
 class ProgressResponse(BaseModel):
     percent_read: float
 
 
-class SessionCreated(BaseModel):
-    id: int
-
-
-class SessionUpdate(BaseModel):
+class SessionUpsert(BaseModel):
+    article_id: int
+    started_at: datetime
     active_seconds: int
 
 
 class SessionState(BaseModel):
-    id: int
+    client_id: str
     active_seconds: int
+
+
+class ResumeTarget(BaseModel):
+    article_id: int
+    title: str
+
+
+class HistoryEntry(BaseModel):
+    chunk_id: int
+    article_id: int
+    article_title: str
+    position: int
+    word_count: int
+    read_at: datetime
+    snippet: str
 
 
 class StatsTotals(BaseModel):

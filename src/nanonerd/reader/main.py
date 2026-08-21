@@ -12,6 +12,7 @@ from nanonerd.reader.api import router
 from nanonerd.reader.db import engine
 from nanonerd.reader.models import Base
 from nanonerd.reader.stats import router as stats_router
+from nanonerd.reader.storage import LocalStorage, storage_from_env
 
 
 def _web_dist() -> Path:
@@ -36,6 +37,13 @@ app.add_middleware(
 )
 app.include_router(router)
 app.include_router(stats_router)
+
+# Cached article images live on local disk unless S3 storage is configured;
+# serve that directory so `<img src="/media/...">` resolves in dev.
+_storage = storage_from_env()
+if isinstance(_storage, LocalStorage):
+    _storage.root.mkdir(parents=True, exist_ok=True)
+    app.mount("/media", StaticFiles(directory=_storage.root), name="media")
 
 _dist = _web_dist()
 if _dist.is_dir():

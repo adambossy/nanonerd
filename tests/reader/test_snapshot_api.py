@@ -39,6 +39,22 @@ def test_get_article_exposes_snapshot_state(monkeypatch):
     assert output == expected_output
 
 
+def test_list_articles_exposes_snapshot_state(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    seed_article(factory, with_snapshot=True)
+
+    output = client.get("/api/articles").json()[0]["snapshot"]
+
+    expected_output = {
+        "status": "ready",
+        "available": True,
+        "bytes": 60,
+        "captured_at": None,
+        "error": None,
+    }
+    assert output == expected_output
+
+
 def test_request_snapshot_marks_pending_and_queues_capture(monkeypatch):
     client, factory, processed = create_test_client(monkeypatch)
     article_id = seed_article(factory)

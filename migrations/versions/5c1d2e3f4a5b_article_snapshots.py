@@ -1,7 +1,7 @@
 """article snapshots
 
 Revision ID: 5c1d2e3f4a5b
-Revises: 136445b6d745
+Revises: 8c1f4a2d9e73
 Create Date: 2026-08-20 12:00:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = '5c1d2e3f4a5b'
-down_revision = '136445b6d745'
+down_revision = "8c1f4a2d9e73"
 branch_labels = None
 depends_on = None
 

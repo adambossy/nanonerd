@@ -6,11 +6,11 @@ primary_region = "ewr"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
 [[vm]]
   size = "shared-cpu-1x"
-  # Faithful-snapshot capture runs headless Chromium in-process (one page at a
-  # time). 256MB is not enough for Chromium + uvicorn; 1GB is the practical
-  # floor. Cost-bearing, so left as a proposal — uncomment to enable:
-  # memory = "1gb"
+  # Article extraction launches headless Chromium per save; the default 256MB
+  # for shared-cpu-1x OOMs on image-heavy pages. 1GB keeps one render plus
+  # the API comfortably in memory (roughly doubles the machine's hourly cost).
+  memory = "1gb"

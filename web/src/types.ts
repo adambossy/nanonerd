@@ -1,3 +1,13 @@
+export type FidelityStatus = "ok" | "degraded" | "not_article" | "blocked";
+
+export interface SnapshotState {
+  status: "none" | "pending" | "ready" | "failed";
+  available: boolean;
+  bytes: number;
+  captured_at: string | null;
+  error: string | null;
+}
+
 export interface ArticleSummary {
   id: number;
   title: string;
@@ -11,6 +21,14 @@ export interface ArticleSummary {
   percent_read: number;
   categories: string[];
   added_at: string;
+  source_kind: "live" | "archive_ph" | "wayback" | null;
+  source_url: string | null;
+  extracted_at: string | null;
+  fidelity_status: FidelityStatus | null;
+  fidelity_score: number | null;
+  fidelity_reasons: string[];
+  // Travels with the summary so the offline list refresh sees capture progress.
+  snapshot: SnapshotState;
 }
 
 export interface ChunkData {
@@ -21,17 +39,23 @@ export interface ChunkData {
   read: boolean;
 }
 
-export interface SnapshotState {
-  status: "none" | "pending" | "ready" | "failed";
-  available: boolean;
-  bytes: number;
-  captured_at: string | null;
-  error: string | null;
-}
-
 export interface ArticleDetail extends ArticleSummary {
   chunks: ChunkData[];
-  snapshot: SnapshotState;
+}
+
+export interface ResumeTarget {
+  article_id: number;
+  title: string;
+}
+
+export interface HistoryEntry {
+  chunk_id: number;
+  article_id: number;
+  article_title: string;
+  position: number;
+  word_count: number;
+  read_at: string;
+  snippet: string;
 }
 
 export interface StatsTotals {

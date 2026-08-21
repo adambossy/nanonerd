@@ -1,21 +1,10 @@
-import type {
-  ArticleDetail,
-  ArticleSummary,
-  SnapshotState,
-  StatsResponse,
-} from "./types";
+import type { HistoryEntry, ResumeTarget, SnapshotState, StatsResponse } from "./types";
+
+// Network-only actions. Reading and progress tracking go through src/offline.
 
 async function asJson<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json() as Promise<T>;
-}
-
-export function listArticles(): Promise<ArticleSummary[]> {
-  return fetch("/api/articles").then((r) => asJson<ArticleSummary[]>(r));
-}
-
-export function getArticle(id: number): Promise<ArticleDetail> {
-  return fetch(`/api/articles/${id}`).then((r) => asJson<ArticleDetail>(r));
 }
 
 export async function retryArticle(id: number): Promise<void> {
@@ -23,29 +12,8 @@ export async function retryArticle(id: number): Promise<void> {
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 }
 
-export function markProgress(
-  id: number,
-  chunkIds: number[],
-  onFail: (ids: number[]) => void,
-): void {
-  fetch(`/api/articles/${id}/progress`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chunk_ids: chunkIds }),
-  })
-    .then((response) => {
-      if (!response.ok) onFail(chunkIds);
-    })
-    .catch(() => onFail(chunkIds));
-}
-
-export function beaconProgress(id: number, chunkIds: number[]): void {
-  const blob = new Blob([JSON.stringify({ chunk_ids: chunkIds })], {
-    type: "application/json",
-  });
-  navigator.sendBeacon(`/api/articles/${id}/progress`, blob);
-}
-
+// Faithful-mode snapshots are online-only: the HTML is multi-MB and never
+// cached locally, and capture is an explicit server-side action.
 export async function getSnapshotHtml(id: number): Promise<string> {
   const response = await fetch(`/api/articles/${id}/snapshot`);
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -59,4 +27,12 @@ export async function requestSnapshot(id: number): Promise<SnapshotState> {
 
 export function getStats(): Promise<StatsResponse> {
   return fetch("/api/stats").then((r) => asJson<StatsResponse>(r));
+}
+
+export function getResume(): Promise<ResumeTarget | null> {
+  return fetch("/api/resume").then((r) => asJson<ResumeTarget | null>(r));
+}
+
+export function getHistory(): Promise<HistoryEntry[]> {
+  return fetch("/api/history").then((r) => asJson<HistoryEntry[]>(r));
 }

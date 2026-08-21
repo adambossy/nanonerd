@@ -39,10 +39,21 @@ class Article(Base):
     status: Mapped[str] = mapped_column(String(16), default="pending")
     error: Mapped[str | None] = mapped_column(Text, default=None)
     content_html: Mapped[str | None] = mapped_column(Text, default=None)
+    # Where the content actually came from: live | archive_ph | wayback.
+    source_kind: Mapped[str | None] = mapped_column(String(16), default=None)
+    source_url: Mapped[str | None] = mapped_column(Text, default=None)
     word_count: Mapped[int] = mapped_column(default=0)
     priority: Mapped[int] = mapped_column(default=0)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     extracted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Extraction-fidelity annotations. These never change `status`; they say how
+    # much of the article actually survived the trip into the reader.
+    fidelity_status: Mapped[str | None] = mapped_column(String(16), default=None)
+    fidelity_score: Mapped[float | None] = mapped_column(default=None)
+    fidelity_reasons: Mapped[str | None] = mapped_column(Text, default=None)
+    fidelity_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
     # Faithful-snapshot state: none | pending | ready | failed
@@ -112,6 +123,9 @@ class ReadingSession(Base):
         DateTime(timezone=True), default=_utcnow
     )
     active_seconds: Mapped[int] = mapped_column(default=0)
+    client_id: Mapped[str | None] = mapped_column(
+        String(36), unique=True, index=True, default=None
+    )
 
 
 class Category(Base):

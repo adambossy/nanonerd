@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { beaconProgress, markProgress } from "../api";
+import { useEffect, useState } from "react";
 import type { ArticleDetail } from "../types";
 
 const WORDS_PER_SECOND_CAP = 30; // faster than ~1800 wpm doesn't count as reading
-const FLUSH_INTERVAL_MS = 3000;
 
 /** Where the `[data-chunk-id]` elements live: the document in Reader mode,
  *  the snapshot's shadow root in Faithful mode (querySelectorAll does not
@@ -14,16 +12,22 @@ function chunkElements(root: ParentNode): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>("[data-chunk-id]"));
 }
 
+/**
+ * Decides when a chunk counts as read (scrolled past + dwell time + tab
+ * visible) and reports newly read chunk ids through `onRead`. Persistence
+ * and syncing are the caller's concern; this hook never touches the network.
+ * The rules are the same whichever `root` holds the chunks.
+ */
 export function useReadTracking(
-  articleId: number,
   article: ArticleDetail | null,
   root: ChunkRoot,
+  onRead: (chunkIds: number[]) => void,
 ): Set<number> {
   const [readIds, setReadIds] = useState<Set<number>>(new Set());
-  const pendingRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     if (!article) return;
+
     const alreadyRead = new Set(
       article.chunks.filter((c) => c.read).map((c) => c.id),
     );
@@ -32,14 +36,12 @@ export function useReadTracking(
 
     const wordCounts = new Map(article.chunks.map((c) => [c.id, c.word_count]));
     const firstVisibleAt = new Map<number, number>();
-    const pending = pendingRef.current;
-    pending.clear();
 
     const markRead = (chunkId: number) => {
       if (alreadyRead.has(chunkId)) return;
       alreadyRead.add(chunkId);
-      pending.add(chunkId);
       setReadIds((prev) => new Set(prev).add(chunkId));
+      onRead([chunkId]);
     };
 
     const dwellSatisfied = (chunkId: number) => {
@@ -93,40 +95,15 @@ export function useReadTracking(
       });
     };
     window.addEventListener("scroll", tryMarkAtBottom, { passive: true });
-
-    const requeue = (ids: number[]) => {
-      ids.forEach((id) => pending.add(id));
-    };
-    const flush = () => {
-      tryMarkAtBottom();
-      if (pending.size === 0) return;
-      const ids = [...pending];
-      pending.clear();
-      markProgress(articleId, ids, requeue);
-    };
-    const flushWithBeacon = () => {
-      if (pending.size === 0) return;
-      const ids = [...pending];
-      pending.clear();
-      beaconProgress(articleId, ids);
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") flushWithBeacon();
-    };
-
-    const timer = setInterval(flush, FLUSH_INTERVAL_MS);
-    window.addEventListener("pagehide", flushWithBeacon);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    // Dwell can elapse without any further scroll; re-check periodically.
+    const timer = setInterval(tryMarkAtBottom, 3000);
 
     return () => {
       observer.disconnect();
       clearInterval(timer);
       window.removeEventListener("scroll", tryMarkAtBottom);
-      window.removeEventListener("pagehide", flushWithBeacon);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      flush();
     };
-  }, [article, articleId, root]);
+  }, [article, root, onRead]);
 
   return readIds;
 }
