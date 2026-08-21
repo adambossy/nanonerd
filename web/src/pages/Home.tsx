@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { retryArticle } from "../api";
 import { loadArticleList, offline } from "../offline";
 import { useSyncStatus } from "../offline/useSyncStatus";
+import { fidelityBadge } from "../reader/fidelity";
 import type { ArticleSummary } from "../types";
 
 function readingMinutes(wordCount: number): number {
@@ -25,11 +26,20 @@ function SyncChip() {
 }
 
 function Card({ article, onRetry }: { article: ArticleSummary; onRetry: () => void }) {
+  const badge = fidelityBadge(article);
   const body = (
     <>
       <h2>{article.title}</h2>
       <div className="meta">
         {article.site_name && <span>{article.site_name}</span>}
+        {badge && (
+          <span
+            className="fidelity-badge"
+            title={article.fidelity_reasons[0] ?? undefined}
+          >
+            {badge}
+          </span>
+        )}
         {article.status === "ready" && (
           <span>
             {article.word_count.toLocaleString()} words ·{" "}

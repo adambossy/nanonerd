@@ -101,6 +101,61 @@ def test_get_article_detail_includes_chunks(monkeypatch):
     assert output["percent_read"] == 25.0
 
 
+def seed_degraded_article(factory):
+    with factory() as session:
+        article = Article(
+            url="https://example.com/degraded",
+            title="Degraded Article",
+            status="ready",
+            word_count=100,
+            chunks=[Chunk(position=0, html="<p>a</p>", word_count=100)],
+            fidelity_status="degraded",
+            fidelity_score=0.37,
+            fidelity_reasons='["18 figures and their captions are missing"]',
+        )
+        session.add(article)
+        session.commit()
+        return article.id
+
+
+def test_list_articles_exposes_fidelity_annotations(monkeypatch):
+    # input
+    client, factory, _processed = create_test_client(monkeypatch)
+    seed_degraded_article(factory)
+
+    # act
+    entry = client.get("/api/articles").json()[0]
+
+    # expected
+    expected_output = {
+        "fidelity_status": "degraded",
+        "fidelity_score": 0.37,
+        "fidelity_reasons": ["18 figures and their captions are missing"],
+    }
+
+    # assert
+    assert {key: entry[key] for key in expected_output} == expected_output
+
+
+def test_get_article_detail_defaults_fidelity_to_empty(monkeypatch):
+    # input
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, _chunk_ids = seed_ready_article(factory)
+
+    # act
+    output = client.get(f"/api/articles/{article_id}").json()
+
+    # expected
+    expected_output: dict[str, object] = {
+        "fidelity_status": None,
+        "fidelity_score": None,
+        "fidelity_reasons": [],
+    }
+
+    # assert
+    assert {key: output[key] for key in expected_output} == expected_output
+
+
 def test_get_article_missing_returns_404(monkeypatch):
     client, _factory, _processed = create_test_client(monkeypatch)
     response = client.get("/api/articles/999")

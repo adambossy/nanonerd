@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import json
 from typing import Annotated
 from uuid import UUID
 
@@ -47,6 +48,16 @@ def _read_words(session: Session, article_id: int) -> int:
     return int(value or 0)
 
 
+def _fidelity_reasons(article: Article) -> list[str]:
+    if not article.fidelity_reasons:
+        return []
+    try:
+        parsed = json.loads(article.fidelity_reasons)
+    except ValueError:
+        return []
+    return [str(reason) for reason in parsed] if isinstance(parsed, list) else []
+
+
 def _summary(article: Article, read_words: int) -> ArticleSummary:
     return ArticleSummary(
         id=article.id,
@@ -62,6 +73,9 @@ def _summary(article: Article, read_words: int) -> ArticleSummary:
         categories=[category.name for category in article.categories],
         added_at=article.added_at,
         extracted_at=article.extracted_at,
+        fidelity_status=article.fidelity_status,
+        fidelity_score=article.fidelity_score,
+        fidelity_reasons=_fidelity_reasons(article),
     )
 
 
@@ -180,6 +194,10 @@ def retry_article(
     session.execute(delete(Chunk).where(Chunk.article_id == article_id))
     article.status = "pending"
     article.error = None
+    article.fidelity_status = None
+    article.fidelity_score = None
+    article.fidelity_reasons = None
+    article.fidelity_checked_at = None
     session.commit()
     background.add_task(pipeline.process_article, article.id)
     return SaveResponse(id=article.id, duplicate=False, status="pending")

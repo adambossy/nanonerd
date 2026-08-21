@@ -47,6 +47,22 @@ class NotArticleError(ValueError):
     """The page fetched fine but is not a readable article."""
 
 
+class FetchError(Exception):
+    """A page could not be fetched, carrying whatever the server did return.
+
+    The fidelity judge needs the status code and body of a refused fetch to
+    tell a bot wall apart from an ordinary outage, so they ride along here
+    instead of being lost inside an httpx exception.
+    """
+
+    def __init__(
+        self, message: str, *, status_code: int | None = None, body: str | None = None
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body
+
+
 @dataclass
 class Extraction:
     title: str | None
@@ -97,9 +113,14 @@ def fetch_html(url: str) -> str:
         if response.status_code in _REDIRECT_STATUS_CODES and location:
             current = str(httpx.URL(current).join(location))
             continue
-        response.raise_for_status()
+        if response.status_code >= 400:
+            raise FetchError(
+                f"HTTP {response.status_code} fetching {current}",
+                status_code=response.status_code,
+                body=response.text,
+            )
         return response.text
-    raise ValueError("too many redirects")
+    raise FetchError("too many redirects")
 
 
 def _clean(value: object) -> str | None:

@@ -87,6 +87,38 @@ a { color: inherit; }
 }
 .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; }
 .error-text { color: var(--danger); font-size: 0.8rem; margin: 0.4rem 0 0; }
+.fidelity-badge {
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.fidelity-notice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0 0 1.2rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.fidelity-dismiss {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  cursor: pointer;
+}
 .retry {
   margin-top: 0.5rem;
   border: 1px solid var(--border);

@@ -76,6 +76,8 @@ ignore-names-in-files = [
     "src/nanonerd/reader/main.py",
     "src/nanonerd/reader/reprocess.py",
     "src/nanonerd/reader/stats.py",
+    # Typer command functions are referenced by the decorator, not by name.
+    "src/nanonerd/reader/judge.py",
 ]
 ignore-definitions = [
     "Migration",
