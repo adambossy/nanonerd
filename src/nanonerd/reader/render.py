@@ -33,6 +33,7 @@ _DEVICE_NAME = "iPhone 13"
 _GOTO_TIMEOUT_MS = 30_000
 _SETTLE_TIMEOUT_MS = 5_000
 _POST_SETTLE_MS = 300
+_CONTENT_ATTEMPTS = 3
 # Resource types that never contribute to article content; skipping them
 # makes renders faster and more deterministic.
 _BLOCKED_RESOURCE_TYPES = {"font", "media", "websocket", "manifest", "ping"}
@@ -92,11 +93,21 @@ def _is_blocked_host(url: str) -> bool:
 UrlGuard = Callable[[str], None]
 
 
-def _route_request(route: Route, url_guard: UrlGuard) -> None:
+def should_block_request(resource_type: str, url: str, mode: RenderMode) -> bool:
+    """Trackers, fonts and media never help extraction; archived scripts hurt it.
+
+    Archive snapshots are server-rendered copies whose JavaScript is stale and
+    often redirect-loops (bot walls replaying themselves), so in ARCHIVE mode
+    scripts are dropped too and the DOM is read as stored.
+    """
+    if resource_type in _BLOCKED_RESOURCE_TYPES or _is_blocked_host(url):
+        return True
+    return mode is RenderMode.ARCHIVE and resource_type == "script"
+
+
+def _route_request(route: Route, url_guard: UrlGuard, mode: RenderMode) -> None:
     request = route.request
-    if request.resource_type in _BLOCKED_RESOURCE_TYPES or _is_blocked_host(
-        request.url
-    ):
+    if should_block_request(request.resource_type, request.url, mode):
         route.abort()
         return
     if request.is_navigation_request() and request.frame.parent_frame is None:
@@ -106,6 +117,19 @@ def _route_request(route: Route, url_guard: UrlGuard) -> None:
             route.abort()
             return
     route.continue_()
+
+
+def _dom_html(page: Page) -> str:
+    # A page mid-navigation refuses to serialize; give it a moment and retry.
+    for _ in range(_CONTENT_ATTEMPTS - 1):
+        try:
+            return page.content()
+        except PlaywrightError:
+            try:
+                page.wait_for_load_state("domcontentloaded", timeout=_SETTLE_TIMEOUT_MS)
+            except PlaywrightTimeoutError:
+                pass
+    return page.content()
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,10 +199,11 @@ class PlaywrightRenderer:
                 try:
                     page = context.new_page()
                     page.route(
-                        "**/*", lambda route: _route_request(route, self._url_guard)
+                        "**/*",
+                        lambda route: _route_request(route, self._url_guard, mode),
                     )
                     navigation = _navigate(page, url, mode)
-                    dom_html = page.content()
+                    dom_html = _dom_html(page)
                     # Relative image/link URLs must resolve against the URL
                     # the page actually landed on (redirects, trailing slash).
                     readable = _try_extract(page, page.url)

@@ -19,6 +19,7 @@ from nanonerd.reader.render import (
     PlaywrightRenderer,
     RenderMode,
     renderer_from_env,
+    should_block_request,
 )
 from nanonerd.reader.storage import LocalStorage
 
@@ -90,6 +91,23 @@ def test_httpx_renderer_returns_body_without_readable(monkeypatch):
         None,
     )
     assert summary == expected_output
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "url", "mode", "expected"),
+    [
+        ("document", "https://site.example/a", RenderMode.LIVE, False),
+        ("script", "https://site.example/app.js", RenderMode.LIVE, False),
+        ("script", "https://web.archive.org/web/2026/x.js", RenderMode.ARCHIVE, True),
+        ("font", "https://site.example/f.woff2", RenderMode.LIVE, True),
+        ("image", "https://www.googletagmanager.com/px.gif", RenderMode.LIVE, True),
+        ("image", "https://site.example/photo.jpg", RenderMode.ARCHIVE, False),
+    ],
+)
+def test_should_block_request(
+    resource_type: str, url: str, mode: RenderMode, expected: bool
+) -> None:
+    assert should_block_request(resource_type, url, mode) == expected
 
 
 def test_renderer_from_env_selects_httpx(monkeypatch):
