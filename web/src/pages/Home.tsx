@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { archiveArticle, deleteArticle, listArticles, retryArticle } from "../api";
+import SwipeRow from "../SwipeRow";
 import type { ArticleSummary } from "../types";
 
 function readingMinutes(wordCount: number): number {
   return Math.max(1, Math.round(wordCount / 230));
 }
 
-function ArchiveIcon() {
+function ArchiveIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="4" rx="1" />
       <path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8" />
       <path d="M10 13h4" />
@@ -17,9 +18,9 @@ function ArchiveIcon() {
   );
 }
 
-function DeleteIcon() {
+function DeleteIcon({ size = 15 }: { size?: number }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 7h16" />
       <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
       <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
@@ -160,27 +161,38 @@ export default function Home() {
             Nothing saved yet. Grab the bookmarklet on the setup page.
           </p>
         )}
-        {articles?.map((article) => (
-          <Card
-            key={article.id}
-            article={article}
-            onRetry={() => {
-              void retryArticle(article.id)
+        <div className="article-list">
+          {articles?.map((article) => {
+            const archive = () =>
+              archiveArticle(article.id)
                 .catch(() => undefined)
                 .then(() => refresh());
-            }}
-            onArchive={() => {
-              void archiveArticle(article.id)
+            const remove = () =>
+              deleteArticle(article.id)
                 .catch(() => undefined)
                 .then(() => refresh());
-            }}
-            onDelete={() => {
-              void deleteArticle(article.id)
-                .catch(() => undefined)
-                .then(() => refresh());
-            }}
-          />
-        ))}
+            return (
+              <SwipeRow
+                key={article.id}
+                rightSwipeIcon={<ArchiveIcon size={22} />}
+                leftSwipeIcon={<DeleteIcon size={22} />}
+                onSwipeRight={archive}
+                onSwipeLeft={remove}
+              >
+                <Card
+                  article={article}
+                  onRetry={() => {
+                    void retryArticle(article.id)
+                      .catch(() => undefined)
+                      .then(() => refresh());
+                  }}
+                  onArchive={archive}
+                  onDelete={remove}
+                />
+              </SwipeRow>
+            );
+          })}
+        </div>
       </main>
     </>
   );
