@@ -1,9 +1,11 @@
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from nanonerd.reader import pipeline
-from nanonerd.reader.extract import Extraction
+from nanonerd.reader.acquire import AcquiredArticle
+from nanonerd.reader.errors import ExtractionError
 from nanonerd.reader.models import Article, Base, Category
 
 CONTENT_HTML = (
@@ -38,23 +40,36 @@ def fetch_article(factory, article_id):
             "word_count": article.word_count,
             "chunk_words": [c.word_count for c in article.chunks],
             "categories": sorted(c.name for c in article.categories),
+            "source_kind": article.source_kind,
+            "source_url": article.source_url,
         }
+
+
+def acquired(
+    title: str | None = "Nice Title",
+    author: str | None = "Ann",
+    site_name: str | None = "Site",
+    source_kind: str = "live",
+) -> AcquiredArticle:
+    return AcquiredArticle(
+        title=title,
+        author=author,
+        site_name=site_name,
+        content_html=CONTENT_HTML,
+        source_kind=source_kind,
+        source_url="https://example.com/a",
+        images_cached=0,
+    )
+
+
+def patch_acquire(monkeypatch: pytest.MonkeyPatch, result: AcquiredArticle) -> None:
+    monkeypatch.setattr(pipeline, "acquire_article", lambda url, *, article_id: result)
 
 
 def test_process_article_success(monkeypatch):
     factory = create_session_factory()
     article_id = create_pending_article(factory)
-    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
-    monkeypatch.setattr(
-        pipeline,
-        "extract_article",
-        lambda html, url: Extraction(
-            title="Nice Title",
-            author="Ann",
-            site_name="Site",
-            content_html=CONTENT_HTML,
-        ),
-    )
+    patch_acquire(monkeypatch, acquired(source_kind="wayback"))
     monkeypatch.setattr(
         pipeline,
         "assign_categories",
@@ -71,18 +86,20 @@ def test_process_article_success(monkeypatch):
         "word_count": 360,
         "chunk_words": [180, 180],
         "categories": ["Parks", "Transit"],
+        "source_kind": "wayback",
+        "source_url": "https://example.com/a",
     }
     assert output == expected_output
 
 
-def test_process_article_fetch_failure_marks_failed(monkeypatch):
+def test_process_article_acquire_failure_marks_failed(monkeypatch):
     factory = create_session_factory()
     article_id = create_pending_article(factory)
 
-    def boom(url):
-        raise ValueError("connection refused")
+    def boom(url, *, article_id):
+        raise ExtractionError("connection refused")
 
-    monkeypatch.setattr(pipeline, "fetch_html", boom)
+    monkeypatch.setattr(pipeline, "acquire_article", boom)
 
     pipeline.process_article(article_id, session_factory=factory)
 
@@ -94,14 +111,7 @@ def test_process_article_fetch_failure_marks_failed(monkeypatch):
 def test_process_article_categorization_failure_is_nonfatal(monkeypatch):
     factory = create_session_factory()
     article_id = create_pending_article(factory)
-    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
-    monkeypatch.setattr(
-        pipeline,
-        "extract_article",
-        lambda html, url: Extraction(
-            title="T", author=None, site_name=None, content_html=CONTENT_HTML
-        ),
-    )
+    patch_acquire(monkeypatch, acquired(title="T", author=None, site_name=None))
 
     def no_api(title, text, existing):
         raise RuntimeError("no api key")
@@ -123,14 +133,7 @@ def test_process_article_reuses_categories_case_insensitive(monkeypatch):
         session.commit()
 
     article_id = create_pending_article(factory)
-    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
-    monkeypatch.setattr(
-        pipeline,
-        "extract_article",
-        lambda html, url: Extraction(
-            title="Title", author=None, site_name=None, content_html=CONTENT_HTML
-        ),
-    )
+    patch_acquire(monkeypatch, acquired(title="Title", author=None, site_name=None))
     # Return lowercase "transit" to test case-insensitive matching, plus new "Parks"
     monkeypatch.setattr(
         pipeline,

@@ -2,7 +2,9 @@ import socket
 
 import pytest
 
-from nanonerd.reader.extract import _ensure_public_http_url, extract_article
+from nanonerd.reader.errors import FetchError
+from nanonerd.reader.extract import extract_article
+from nanonerd.reader.fetch import ensure_public_http_url as _ensure_public_http_url
 
 FIXTURE_HTML = """<!doctype html>
 <html>
@@ -62,22 +64,22 @@ def test_extract_article_returns_none_for_empty_page():
 
 
 def test_ensure_public_http_url_rejects_file_scheme():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("file:///etc/passwd")
 
 
 def test_ensure_public_http_url_rejects_localhost():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("http://localhost:8000/x")
 
 
 def test_ensure_public_http_url_rejects_loopback_ip():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("http://127.0.0.1/x")
 
 
 def test_ensure_public_http_url_rejects_link_local_metadata_ip():
-    with pytest.raises(ValueError):
+    with pytest.raises(FetchError):
         _ensure_public_http_url("http://169.254.169.254/latest/meta-data")
 
 
