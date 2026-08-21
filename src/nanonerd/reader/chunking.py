@@ -54,6 +54,8 @@ CONTAINER_TAGS = {
 MEDIA_TAGS = {"figure", "img", "video", "audio", "math"}
 # Dwell-time word-equivalent for chunks whose value is not in their text.
 MEDIA_WORDS = 20
+# Lists longer than this are split per item so progress stays fine-grained.
+LONG_LIST_WORDS = 120
 _FOOTNOTE_ID = re.compile(r"^(nn-)?fn[:\-_]?\d", re.IGNORECASE)
 
 
@@ -128,21 +130,28 @@ def _is_footnote_list(element: Element) -> bool:
     )
 
 
-def _split_footnotes(footnote_list: Element) -> Iterator[Element]:
-    """One chunk per footnote, each wrapped in an `<ol start>` to keep numbering."""
-    start = int(footnote_list.get("start") or 1)
-    for offset, item in enumerate(list(footnote_list)):
+def _split_list(list_element: Element) -> Iterator[Element]:
+    """One chunk per item, each in its own list (`<ol start>` keeps numbering)."""
+    start = int(list_element.get("start") or 1)
+    for offset, item in enumerate(list(list_element)):
         if item.tag != "li":
             continue
-        wrapper = new_element(footnote_list.tag)
-        for attr, value in footnote_list.attrib.items():
+        wrapper = new_element(list_element.tag)
+        for attr, value in list_element.attrib.items():
             if attr != "start":
                 wrapper.set(attr, value)
-        if footnote_list.tag == "ol":
+        if list_element.tag == "ol":
             wrapper.set("start", str(start + offset))
         item.tail = None
         wrapper.append(item)
         yield wrapper
+
+
+def _should_split_list(element: Element) -> bool:
+    """Footnotes always; other lists only when too long to mark read as one unit."""
+    if element.tag not in ("ol", "ul"):
+        return False
+    return _is_footnote_list(element) or _word_count(element) > LONG_LIST_WORDS
 
 
 def _collect_blocks(container: Element) -> Iterator[Element]:
@@ -160,8 +169,8 @@ def _collect_blocks(container: Element) -> Iterator[Element]:
             yield from _collect_blocks(child)
         elif tag in BLOCK_TAGS:
             yield from run.flush()
-            if _is_footnote_list(child):
-                yield from _split_footnotes(child)
+            if _should_split_list(child):
+                yield from _split_list(child)
             else:
                 yield child
         else:

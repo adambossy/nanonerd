@@ -22,6 +22,7 @@ WAYBACK_CDX_URL = "https://web.archive.org/cdx/search/cdx"
 WAYBACK_NEWEST_URL = "https://web.archive.org/web/2/"
 
 _TIMEOUT = httpx.Timeout(30.0)
+_LOOKUP_ATTEMPTS = 2
 _SUBMIT_POLL_DELAYS = (5.0, 10.0, 20.0)
 _MEMENTO_LINE = re.compile(r"<(?P<url>[^>]+)>;\s*rel=\"(?P<rel>[^\"]*memento[^\"]*)\"")
 _HEADERS = {"User-Agent": ARCHIVE_USER_AGENT}
@@ -30,13 +31,18 @@ SleepFn = Callable[[float], None]
 
 
 def _get(client: httpx.Client, url: str) -> httpx.Response | None:
-    try:
-        return client.get(
-            url, headers=_HEADERS, follow_redirects=False, timeout=_TIMEOUT
-        )
-    except httpx.HTTPError:
-        logger.info("archive lookup request failed: %s", url, exc_info=True)
-        return None
+    # Both archives are slow and occasionally drop connections; one retry
+    # catches most transient failures without hammering them.
+    for attempt in range(_LOOKUP_ATTEMPTS):
+        try:
+            return client.get(
+                url, headers=_HEADERS, follow_redirects=False, timeout=_TIMEOUT
+            )
+        except httpx.HTTPError:
+            logger.info(
+                "archive lookup request failed (attempt %d): %s", attempt + 1, url
+            )
+    return None
 
 
 def _latest_memento(timemap: str) -> str | None:

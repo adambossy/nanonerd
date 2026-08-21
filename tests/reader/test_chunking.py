@@ -124,10 +124,21 @@ def test_chunk_html_splits_footnote_list_per_item():
     assert words_of(output) == [4, 3, 2]
 
 
-def test_chunk_html_keeps_ordinary_list_whole():
+def test_chunk_html_keeps_short_list_whole():
     input_html = '<ol start="3"><li>alpha</li><li>beta</li></ol>'
     output = chunk_html(input_html)
     assert [(c.html, c.word_count) for c in output] == [(input_html, 2)]
+
+
+def test_chunk_html_splits_long_list_per_item():
+    item = "<li>" + " ".join(f"w{i}" for i in range(70)) + "</li>"
+    input_html = f"<ul>{item}{item}{item}</ul>"
+    output = chunk_html(input_html)
+    assert [(c.html.startswith("<ul><li>"), c.word_count) for c in output] == [
+        (True, 70),
+        (True, 70),
+        (True, 70),
+    ]
 
 
 def test_chunk_html_blockquote_is_atomic():

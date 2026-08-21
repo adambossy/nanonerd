@@ -179,7 +179,9 @@ class PlaywrightRenderer:
                     )
                     navigation = _navigate(page, url, mode)
                     dom_html = page.content()
-                    readable = _try_extract(page, url)
+                    # Relative image/link URLs must resolve against the URL
+                    # the page actually landed on (redirects, trailing slash).
+                    readable = _try_extract(page, page.url)
                     return RenderedPage(
                         url=url,
                         final_url=page.url,
