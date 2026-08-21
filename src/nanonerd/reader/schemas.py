@@ -56,16 +56,14 @@ class ProgressResponse(BaseModel):
     percent_read: float
 
 
-class SessionCreated(BaseModel):
-    id: int
-
-
-class SessionUpdate(BaseModel):
+class SessionUpsert(BaseModel):
+    article_id: int
+    started_at: datetime
     active_seconds: int
 
 
 class SessionState(BaseModel):
-    id: int
+    client_id: str
     active_seconds: int
 
 

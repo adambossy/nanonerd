@@ -157,9 +157,7 @@ def test_mark_progress_clamps_future_read_at_to_now(monkeypatch):
 
     client.post(
         f"/api/articles/{article_id}/progress",
-        json={
-            "marks": [{"chunk_id": chunk_ids[1], "read_at": "2999-01-01T00:00:00Z"}]
-        },
+        json={"marks": [{"chunk_id": chunk_ids[1], "read_at": "2999-01-01T00:00:00Z"}]},
     )
 
     output = _read_at_by_position(factory, article_id)[1]
@@ -184,9 +182,7 @@ def test_mark_progress_ignores_unknown_and_foreign_chunk_ids(monkeypatch):
 def test_mark_progress_replay_is_idempotent(monkeypatch):
     client, factory, _processed = create_test_client(monkeypatch)
     article_id, chunk_ids = seed_ready_article(factory)
-    payload = {
-        "marks": [{"chunk_id": chunk_ids[1], "read_at": "2026-01-01T00:00:00Z"}]
-    }
+    payload = {"marks": [{"chunk_id": chunk_ids[1], "read_at": "2026-01-01T00:00:00Z"}]}
 
     first = client.post(f"/api/articles/{article_id}/progress", json=payload).json()
     second = client.post(f"/api/articles/{article_id}/progress", json=payload).json()
