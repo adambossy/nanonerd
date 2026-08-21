@@ -10,3 +10,7 @@ primary_region = "ewr"
 
 [[vm]]
   size = "shared-cpu-1x"
+  # Article extraction launches headless Chromium per save; the default 256MB
+  # for shared-cpu-1x OOMs on image-heavy pages. 1GB keeps one render plus
+  # the API comfortably in memory (roughly doubles the machine's hourly cost).
+  memory = "1gb"
