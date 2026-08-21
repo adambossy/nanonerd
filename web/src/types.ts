@@ -11,6 +11,7 @@ export interface ArticleSummary {
   percent_read: number;
   categories: string[];
   added_at: string;
+  extracted_at: string | null;
 }
 
 export interface ChunkData {

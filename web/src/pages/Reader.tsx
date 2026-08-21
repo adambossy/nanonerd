@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
-import { getArticle } from "../api";
+import { loadArticle, offline } from "../offline";
 import { useReadTracking } from "../reader/useReadTracking";
-import { useReadingSession } from "../reader/useReadingSession";
+import { useReadingSession, type SessionTick } from "../reader/useReadingSession";
 import type { ArticleDetail } from "../types";
 
 const RESUME_FAB_FADE_DISTANCE = 120; // px of scroll over which the resume fab fades out
+
+type LoadState = "loading" | "ready" | "unavailable" | "invalid";
 
 export default function Reader() {
   const { id } = useParams();
@@ -16,9 +18,33 @@ export default function Reader() {
   const targetChunk = searchParams.get("chunk");
   const articleId = Number(id);
   const [article, setArticle] = useState<ArticleDetail | null>(null);
-  const [failed, setFailed] = useState(false);
-  const readIds = useReadTracking(articleId, article);
-  useReadingSession(articleId, article !== null);
+  const [state, setState] = useState<LoadState>("loading");
+
+  // Persist at event time so nothing is lost if the tab closes; sync soon after.
+  const onRead = useCallback(
+    (chunkIds: number[]) => {
+      const read_at = new Date().toISOString();
+      void offline.store
+        .addMarks(
+          chunkIds.map((chunk_id) => ({
+            chunk_id,
+            article_id: articleId,
+            read_at,
+            synced: false,
+          })),
+        )
+        .then(() => offline.scheduler.requestSync());
+    },
+    [articleId],
+  );
+  const onTick = useCallback((tick: SessionTick) => {
+    void offline.store
+      .upsertSession({ ...tick, synced_seconds: 0 })
+      .then(() => offline.scheduler.requestSync());
+  }, []);
+
+  const readIds = useReadTracking(article, onRead);
+  useReadingSession(articleId, article !== null, onTick);
   const resumeBaselineRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -44,12 +70,31 @@ export default function Reader() {
 
   useEffect(() => {
     if (!Number.isFinite(articleId)) {
-      setFailed(true);
+      setState("invalid");
       return;
     }
-    getArticle(articleId)
-      .then(setArticle)
-      .catch(() => setFailed(true));
+    let cancelled = false;
+    const load = async () => {
+      let detail = await loadArticle(offline.store, articleId);
+      if (!detail) {
+        // Not cached yet (first open, or a new article): try one sync, then look again.
+        await offline.scheduler.syncNow();
+        detail = await loadArticle(offline.store, articleId);
+      }
+      if (cancelled) return;
+      if (detail) {
+        setArticle(detail);
+        setState("ready");
+      } else {
+        setState("unavailable");
+      }
+    };
+    void load().catch(() => {
+      if (!cancelled) setState("unavailable");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [articleId]);
 
   // Open at the requested chunk, otherwise at the earliest unread chunk.
@@ -82,10 +127,14 @@ export default function Reader() {
     return (100 * read) / total;
   }, [article, readIds]);
 
-  if (failed) {
+  if (state === "invalid" || state === "unavailable") {
     return (
       <main className="reader">
-        <p>Couldn't load this article.</p>
+        <p>
+          {state === "invalid"
+            ? "Couldn't load this article."
+            : "This article isn't available offline yet. It downloads the next time you're connected."}
+        </p>
         <Link to="/library">back</Link>
       </main>
     );

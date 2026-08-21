@@ -63,6 +63,12 @@ a { color: inherit; }
   gap: 0.6rem;
   flex-wrap: wrap;
 }
+.sync-chip {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.sync-chip.offline { color: #b3261e; }
 .chips { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.5rem; }
 .chip {
   border: 1px solid var(--border);

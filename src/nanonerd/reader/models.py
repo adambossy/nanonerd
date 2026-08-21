@@ -85,6 +85,9 @@ class ReadingSession(Base):
         DateTime(timezone=True), default=_utcnow
     )
     active_seconds: Mapped[int] = mapped_column(default=0)
+    client_id: Mapped[str | None] = mapped_column(
+        String(36), unique=True, index=True, default=None
+    )
 
 
 class Category(Base):

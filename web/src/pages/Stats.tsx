@@ -72,7 +72,7 @@ export default function Stats() {
         <Link to="/library">library</Link>
       </nav>
       <main className="stats">
-        {failed && <p className="empty">Couldn't load stats.</p>}
+        {failed && <p className="empty">Stats need a connection.</p>}
         {!failed && !stats && <p className="empty">loading…</p>}
         {stats && (
           <>
