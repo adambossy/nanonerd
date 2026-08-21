@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture Post</title>
+<link rel="stylesheet" href="style.css">
+<style>body { color: rgb(10, 20, 30); }</style>
+</head>
+<body>
+<header class="site-header"><nav><a href="/">Home</a></nav></header>
+<main>
+<article>
+<h1>Fixture Post</h1>
+<p id="first">Rendered paragraph one with enough words to count.</p>
+<p class="hidden-note" style="display:none">You should not see this.</p>
+<img id="pic" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" loading="lazy" alt="dot">
+<div id="js-target"></div>
+</article>
+</main>
+<script>
+  const el = document.getElementById("js-target");
+  el.innerHTML = "<p>Paragraph inserted by script.</p>";
+</script>
+</body>
+</html>
