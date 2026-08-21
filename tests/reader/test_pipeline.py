@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from nanonerd.reader import pipeline
-from nanonerd.reader.extract import Extraction
+from nanonerd.reader.extract import Extraction, NotArticleError
 from nanonerd.reader.models import Article, Base, Category
 
 CONTENT_HTML = (
@@ -89,6 +89,27 @@ def test_process_article_fetch_failure_marks_failed(monkeypatch):
     output = fetch_article(factory, article_id)
     assert output["status"] == "failed"
     assert "connection refused" in output["error"]
+
+
+def test_process_article_not_an_article_marks_failed_with_reason(monkeypatch):
+    factory = create_session_factory()
+    article_id = create_pending_article(factory)
+    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
+
+    def reject(html, url):
+        raise NotArticleError("not an article: og:type is product.group")
+
+    monkeypatch.setattr(pipeline, "extract_article", reject)
+
+    pipeline.process_article(article_id, session_factory=factory)
+
+    output = fetch_article(factory, article_id)
+    expected_output = {
+        "status": "failed",
+        "error": "not an article: og:type is product.group",
+        "chunk_words": [],
+    }
+    assert {key: output[key] for key in expected_output} == expected_output
 
 
 def test_process_article_categorization_failure_is_nonfatal(monkeypatch):
