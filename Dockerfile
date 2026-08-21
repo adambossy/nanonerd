@@ -10,6 +10,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
+# Headless Chromium for faithful-snapshot capture (playwright pins the build
+# matching the installed python package; --with-deps pulls the apt libs).
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY --from=web /web/dist ./web/dist
