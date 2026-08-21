@@ -1,7 +1,10 @@
 import socket
+from types import SimpleNamespace
 
+import httpx
 import pytest
 
+from nanonerd.reader import extract
 from nanonerd.reader.extract import _ensure_public_http_url, extract_article
 
 FIXTURE_HTML = """<!doctype html>
@@ -59,6 +62,30 @@ def test_extract_article_returns_content_and_metadata():
 def test_extract_article_returns_none_for_empty_page():
     output = extract_article("<html><body></body></html>", "https://x.com/a")
     assert output is None
+
+
+def create_blocked_response(status_code=403, text="<html>bot wall</html>"):
+    return SimpleNamespace(status_code=status_code, headers={}, text=text)
+
+
+def test_fetch_html_raises_fetch_error_carrying_status_and_body(monkeypatch):
+    # input
+    input_url = "https://example.com/blocked"
+
+    # helper setup
+    monkeypatch.setattr(extract, "_ensure_public_http_url", lambda url: None)
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: create_blocked_response())
+
+    # act
+    with pytest.raises(extract.FetchError) as raised:
+        extract.fetch_html(input_url)
+    output = {"status_code": raised.value.status_code, "body": raised.value.body}
+
+    # expected
+    expected_output = {"status_code": 403, "body": "<html>bot wall</html>"}
+
+    # assert
+    assert output == expected_output
 
 
 def test_ensure_public_http_url_rejects_file_scheme():

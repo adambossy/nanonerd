@@ -1,9 +1,11 @@
+import json
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from nanonerd.reader import pipeline
-from nanonerd.reader.extract import Extraction
+from nanonerd.reader.extract import Extraction, FetchError
 from nanonerd.reader.models import Article, Base, Category
 
 CONTENT_HTML = (
@@ -39,6 +41,82 @@ def fetch_article(factory, article_id):
             "chunk_words": [c.word_count for c in article.chunks],
             "categories": sorted(c.name for c in article.categories),
         }
+
+
+def fetch_fidelity(factory, article_id):
+    with factory() as session:
+        article = session.scalars(select(Article).where(Article.id == article_id)).one()
+        return {
+            "status": article.status,
+            "fidelity_status": article.fidelity_status,
+            "reasons": json.loads(article.fidelity_reasons or "[]"),
+            "checked": article.fidelity_checked_at is not None,
+        }
+
+
+def test_process_article_records_fidelity_verdict(monkeypatch):
+    # input
+    source_html = "<html><body><article>" + CONTENT_HTML + "</article></body></html>"
+
+    # helper setup
+    factory = create_session_factory()
+    article_id = create_pending_article(factory)
+    monkeypatch.setattr(pipeline, "fetch_html", lambda url: source_html)
+    monkeypatch.setattr(
+        pipeline,
+        "extract_article",
+        lambda html, url: Extraction(
+            title="Nice Title", author=None, site_name=None, content_html=CONTENT_HTML
+        ),
+    )
+    monkeypatch.setattr(pipeline, "assign_categories", lambda title, text, existing: [])
+
+    # act
+    pipeline.process_article(article_id, session_factory=factory)
+    output = fetch_fidelity(factory, article_id)
+
+    # expected
+    expected_output = {
+        "status": "ready",
+        "fidelity_status": "ok",
+        "reasons": [],
+        "checked": True,
+    }
+
+    # assert
+    assert output == expected_output
+
+
+def test_process_article_records_blocked_fidelity_on_bot_wall(monkeypatch):
+    # input
+    bot_wall_html = (
+        "<html><body><p>Please enable JS and disable any ad blocker</p>"
+        "<script>var dd={'host':'geo.captcha-delivery.com'}</script></body></html>"
+    )
+
+    # helper setup
+    factory = create_session_factory()
+    article_id = create_pending_article(factory)
+
+    def blocked(url):
+        raise FetchError("HTTP 403", status_code=403, body=bot_wall_html)
+
+    monkeypatch.setattr(pipeline, "fetch_html", blocked)
+
+    # act
+    pipeline.process_article(article_id, session_factory=factory)
+    output = fetch_fidelity(factory, article_id)
+
+    # expected
+    expected_output = {
+        "status": "failed",
+        "fidelity_status": "blocked",
+        "reasons": ["fetch returned HTTP 403 — the page was not served"],
+        "checked": True,
+    }
+
+    # assert
+    assert output == expected_output
 
 
 def test_process_article_success(monkeypatch):
