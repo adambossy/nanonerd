@@ -74,6 +74,7 @@ ignore-names-in-files = [
     "test/**",
     "src/nanonerd/reader/api.py",
     "src/nanonerd/reader/main.py",
+    "src/nanonerd/reader/reprocess.py",
     "src/nanonerd/reader/stats.py",
 ]
 ignore-definitions = [
