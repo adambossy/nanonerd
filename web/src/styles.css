@@ -244,8 +244,9 @@ a { color: inherit; }
 .reader video { border-radius: 8px; background: #000; }
 
 .reader math { font-size: 1.05em; }
+/* No `display` here: the UA stylesheet's `display: block math` is what lays
+   out mrow/mfrac/msub; overriding it stacks every token vertically. */
 .reader math[display="block"] {
-  display: block;
   overflow-x: auto;
   margin: 1.2rem 0;
   text-align: center;
