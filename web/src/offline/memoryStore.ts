@@ -20,6 +20,9 @@ export class MemoryStore implements LocalStore {
       this.articles.delete(id);
       this.bodies.delete(id);
       await this.deleteMarksForArticle(id);
+      for (const [clientId, s] of this.sessions) {
+        if (s.article_id === id) this.sessions.delete(clientId);
+      }
     }
     for (const a of articles) this.articles.set(a.id, structuredClone(a));
   }
@@ -47,10 +50,6 @@ export class MemoryStore implements LocalStore {
       article_id: b.article_id,
       extracted_at: b.extracted_at,
     }));
-  }
-
-  async deleteBody(articleId: number): Promise<void> {
-    this.bodies.delete(articleId);
   }
 
   async addMarks(marks: ReadMark[]): Promise<void> {

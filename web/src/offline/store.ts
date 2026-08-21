@@ -11,7 +11,7 @@ export interface BodyVersion {
  * `MemoryStore` in tests. All methods are safe to call concurrently.
  */
 export interface LocalStore {
-  /** Replace the whole list. Articles absent from `articles` are removed along with their bodies and marks. */
+  /** Replace the whole list. Articles absent from `articles` are removed along with their bodies, marks, and sessions. */
   replaceArticles(articles: StoredArticle[]): Promise<void>;
   /** Ordered like the server list: priority desc, then added_at desc. */
   listArticles(): Promise<StoredArticle[]>;
@@ -20,7 +20,6 @@ export interface LocalStore {
   putBody(body: StoredBody): Promise<void>;
   getBody(articleId: number): Promise<StoredBody | undefined>;
   listBodyVersions(): Promise<BodyVersion[]>;
-  deleteBody(articleId: number): Promise<void>;
 
   /** Insert marks; a chunk already marked keeps its existing (earlier) record. */
   addMarks(marks: ReadMark[]): Promise<void>;

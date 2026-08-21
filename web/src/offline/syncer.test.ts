@@ -1,73 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { ArticleDetail, ArticleSummary } from "../types";
+import { FakeSyncApi, deferred } from "./fakes";
 import { article, body, chunk, detail, mark, session } from "./fixtures";
 import { MemoryStore } from "./memoryStore";
 import { Syncer } from "./syncer";
-import { SyncError, type MarkPayload, type RequestOptions, type SessionPayload, type SyncApi } from "./transport";
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => (resolve = r));
-  return { promise, resolve };
-}
-
-/** Scriptable SyncApi that records every call. */
-class FakeSyncApi implements SyncApi {
-  articles: ArticleSummary[] = [];
-  details = new Map<number, ArticleDetail>();
-  failPostMarks = new Map<number, SyncError>();
-  failPutSession = new Map<string, SyncError>();
-  failFetchArticles: SyncError | null = null;
-  failFetchArticle = new Map<number, SyncError>();
-  /** When set, fetchArticle waits on the deferred for that id (for concurrency tests). */
-  gate = new Map<number, Deferred<void>>();
-  inflightFetches = 0;
-  maxInflightFetches = 0;
-  calls: Array<{ op: string; args: unknown[] }> = [];
-
-  async fetchArticles(): Promise<ArticleSummary[]> {
-    this.calls.push({ op: "fetchArticles", args: [] });
-    if (this.failFetchArticles) throw this.failFetchArticles;
-    return structuredClone(this.articles);
-  }
-
-  async fetchArticle(id: number): Promise<ArticleDetail> {
-    this.calls.push({ op: "fetchArticle", args: [id] });
-    this.inflightFetches += 1;
-    this.maxInflightFetches = Math.max(this.maxInflightFetches, this.inflightFetches);
-    try {
-      await this.gate.get(id)?.promise;
-      const failure = this.failFetchArticle.get(id);
-      if (failure) throw failure;
-      const found = this.details.get(id);
-      if (!found) throw new SyncError("http", 404);
-      return structuredClone(found);
-    } finally {
-      this.inflightFetches -= 1;
-    }
-  }
-
-  async postMarks(articleId: number, marks: MarkPayload[], opts?: RequestOptions): Promise<void> {
-    this.calls.push({ op: "postMarks", args: [articleId, marks, opts] });
-    const failure = this.failPostMarks.get(articleId);
-    if (failure) throw failure;
-  }
-
-  async putSession(payload: SessionPayload, opts?: RequestOptions): Promise<void> {
-    this.calls.push({ op: "putSession", args: [payload, opts] });
-    const failure = this.failPutSession.get(payload.client_id);
-    if (failure) throw failure;
-  }
-
-  ops(): string[] {
-    return this.calls.map((c) => c.op);
-  }
-}
+import { SyncError, type MarkPayload } from "./transport";
 
 const NETWORK = new SyncError("network", null);
 const GONE = new SyncError("http", 404);

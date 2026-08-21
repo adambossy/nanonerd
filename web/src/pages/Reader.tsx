@@ -49,7 +49,7 @@ export default function Reader() {
       let detail = await loadArticle(offline.store, articleId);
       if (!detail) {
         // Not cached yet (first open, or a new article): try one sync, then look again.
-        await offline.syncer.syncAll();
+        await offline.scheduler.syncNow();
         detail = await loadArticle(offline.store, articleId);
       }
       if (cancelled) return;

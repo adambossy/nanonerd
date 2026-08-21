@@ -1,39 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { SyncScheduler, type SchedulerEnv, type SchedulerEvent, type SyncRunner } from "./scheduler";
+import { FakeEnv } from "./fakes";
+import { SyncScheduler, type SyncRunner } from "./scheduler";
 import type { SyncOptions, SyncResult } from "./syncer";
 import { SyncError } from "./transport";
 import type { SyncStatus } from "./types";
 
 const OK: SyncResult = { pushedMarks: 0, pushedSessions: 0, refreshed: true, prefetched: 0, error: null };
 const OFFLINE: SyncResult = { ...OK, refreshed: false, error: new SyncError("network", null) };
-
-class FakeEnv implements SchedulerEnv {
-  online = true;
-  visible = true;
-  private handlers = new Map<SchedulerEvent, Set<() => void>>();
-
-  isOnline(): boolean {
-    return this.online;
-  }
-  isVisible(): boolean {
-    return this.visible;
-  }
-  on(event: SchedulerEvent, handler: () => void): () => void {
-    const set = this.handlers.get(event) ?? new Set();
-    set.add(handler);
-    this.handlers.set(event, set);
-    return () => set.delete(handler);
-  }
-  emit(event: SchedulerEvent): void {
-    for (const handler of this.handlers.get(event) ?? []) handler();
-  }
-  setTimeout(fn: () => void, ms: number): unknown {
-    return globalThis.setTimeout(fn, ms);
-  }
-  clearTimeout(handle: unknown): void {
-    globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>);
-  }
-}
 
 class FakeSyncer implements SyncRunner {
   calls: SyncOptions[] = [];
@@ -265,5 +238,59 @@ describe("SyncScheduler", () => {
     await flush();
 
     expect(statuses.at(-1)).toMatchObject({ online: true, syncing: false, lastError: "Error: bug" });
+  });
+
+  test("syncNow resolves with the run's result", async () => {
+    const { syncer, scheduler } = setup();
+    syncer.results = [{ ...OK, prefetched: 4 }];
+
+    const output = await scheduler.syncNow();
+
+    expect([output.prefetched, syncer.calls]).toEqual([4, [{}]]);
+  });
+
+  test("syncNow during an in-flight sync waits for the coalesced follow-up run", async () => {
+    const { syncer, scheduler } = setup();
+    let release!: () => void;
+    syncer.gate = new Promise<void>((r) => (release = r));
+    syncer.results = [{ ...OK, prefetched: 1 }, { ...OK, prefetched: 2 }];
+    scheduler.start();
+    await flush();
+
+    const waiting = scheduler.syncNow();
+    syncer.gate = null;
+    release();
+    const output = await waiting;
+
+    expect([output.prefetched, syncer.calls.length]).toEqual([2, 2]);
+  });
+
+  test("syncNow during backoff runs immediately instead of waiting for the retry", async () => {
+    const { syncer, scheduler } = setup();
+    syncer.results = [OFFLINE, OK];
+    scheduler.start();
+    await flush();
+
+    const output = await scheduler.syncNow();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flush();
+
+    expect([output.error, syncer.calls.length]).toEqual([null, 2]);
+  });
+
+  test("a queued full sync is not downgraded by a concurrent push-only flush", async () => {
+    const { env, syncer, scheduler } = setup();
+    let release!: () => void;
+    syncer.gate = new Promise<void>((r) => (release = r));
+    scheduler.start();
+    await flush();
+
+    scheduler.requestSync();
+    env.emit("hidden");
+    syncer.gate = null;
+    release();
+    await flush();
+
+    expect(syncer.calls).toEqual([{}, { pushOnly: false, keepalive: true }]);
   });
 });

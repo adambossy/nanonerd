@@ -29,11 +29,13 @@ export function describeStoreContract(
       expect(output).toEqual([2, 3, 1]);
     });
 
-    test("replaceArticles prunes removed articles with their bodies and marks", async () => {
+    test("replaceArticles prunes removed articles with their bodies, marks, and sessions", async () => {
       await store.replaceArticles([article({ id: 1 }), article({ id: 2 })]);
       await store.putBody(body({ article_id: 1 }));
       await store.putBody(body({ article_id: 2, chunks: [] }));
       await store.addMarks([mark({ chunk_id: 10, article_id: 1 }), mark({ chunk_id: 20, article_id: 2 })]);
+      await store.upsertSession(session({ client_id: "s1", article_id: 1, active_seconds: 5 }));
+      await store.upsertSession(session({ client_id: "s2", article_id: 2, active_seconds: 5 }));
 
       await store.replaceArticles([article({ id: 2 })]);
       const output = {
@@ -42,9 +44,17 @@ export function describeStoreContract(
         body2: (await store.getBody(2))?.article_id,
         marks1: await store.marksForArticle(1),
         marks2: (await store.marksForArticle(2)).map((m) => m.chunk_id),
+        sessions: (await store.unsyncedSessions()).map((s) => s.client_id),
       };
 
-      expect(output).toEqual({ articles: [2], body1: undefined, body2: 2, marks1: [], marks2: [20] });
+      expect(output).toEqual({
+        articles: [2],
+        body1: undefined,
+        body2: 2,
+        marks1: [],
+        marks2: [20],
+        sessions: ["s2"],
+      });
     });
 
     test("replaceArticles overwrites existing article fields", async () => {
@@ -79,16 +89,6 @@ export function describeStoreContract(
         { article_id: 1, extracted_at: "a" },
         { article_id: 2, extracted_at: null },
       ]);
-    });
-
-    test("deleteBody removes only that body", async () => {
-      await store.putBody(body({ article_id: 1 }));
-      await store.putBody(body({ article_id: 2 }));
-
-      await store.deleteBody(1);
-      const output = [await store.getBody(1), (await store.getBody(2))?.article_id];
-
-      expect(output).toEqual([undefined, 2]);
     });
 
     test("addMarks keeps the existing record for an already-marked chunk", async () => {

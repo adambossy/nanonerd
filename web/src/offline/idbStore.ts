@@ -16,7 +16,7 @@ interface ReaderDB extends DBSchema {
     value: MarkRow;
     indexes: { by_article: number; by_synced: 0 | 1 };
   };
-  sessions: { key: string; value: LocalSession };
+  sessions: { key: string; value: LocalSession; indexes: { by_article: number } };
 }
 
 const DB_VERSION = 1;
@@ -41,14 +41,15 @@ export class IdbStore implements LocalStore {
         const marks = db.createObjectStore("marks", { keyPath: "chunk_id" });
         marks.createIndex("by_article", "article_id");
         marks.createIndex("by_synced", "synced");
-        db.createObjectStore("sessions", { keyPath: "client_id" });
+        const sessions = db.createObjectStore("sessions", { keyPath: "client_id" });
+        sessions.createIndex("by_article", "article_id");
       },
     });
   }
 
   async replaceArticles(articles: StoredArticle[]): Promise<void> {
     const db = await this.db;
-    const tx = db.transaction(["articles", "bodies", "marks"], "readwrite");
+    const tx = db.transaction(["articles", "bodies", "marks", "sessions"], "readwrite");
     const keep = new Set(articles.map((a) => a.id));
     for (const id of await tx.objectStore("articles").getAllKeys()) {
       if (keep.has(id)) continue;
@@ -56,6 +57,9 @@ export class IdbStore implements LocalStore {
       await tx.objectStore("bodies").delete(id);
       for (const key of await tx.objectStore("marks").index("by_article").getAllKeys(id)) {
         await tx.objectStore("marks").delete(key);
+      }
+      for (const key of await tx.objectStore("sessions").index("by_article").getAllKeys(id)) {
+        await tx.objectStore("sessions").delete(key);
       }
     }
     for (const a of articles) await tx.objectStore("articles").put(a);
@@ -81,10 +85,6 @@ export class IdbStore implements LocalStore {
   async listBodyVersions(): Promise<BodyVersion[]> {
     const bodies = await (await this.db).getAll("bodies");
     return bodies.map((b) => ({ article_id: b.article_id, extracted_at: b.extracted_at }));
-  }
-
-  async deleteBody(articleId: number): Promise<void> {
-    await (await this.db).delete("bodies", articleId);
   }
 
   async addMarks(marks: ReadMark[]): Promise<void> {

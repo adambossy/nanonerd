@@ -14,7 +14,7 @@ import { HttpSyncApi } from "./transport";
 
 export interface Offline {
   store: LocalStore;
-  syncer: Syncer;
+  /** The only way the app triggers or observes syncing; the Syncer itself stays internal. */
   scheduler: SyncScheduler;
 }
 
@@ -54,7 +54,7 @@ export function createOffline(): Offline {
     typeof indexedDB === "undefined" ? new MemoryStore() : new IdbStore();
   const syncer = new Syncer(store, new HttpSyncApi());
   const scheduler = new SyncScheduler(syncer, browserEnv());
-  return { store, syncer, scheduler };
+  return { store, scheduler };
 }
 
 export const offline: Offline = createOffline();

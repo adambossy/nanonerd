@@ -7,6 +7,9 @@ import type { SyncStatus } from "./types";
  * requests, with exponential backoff after retryable failures. The browser
  * is reached only through the injected SchedulerEnv, so this is unit-testable
  * with fake timers and no DOM.
+ *
+ * Single-flight: at most one sync runs at a time; requests that arrive while
+ * one is running coalesce into a single follow-up run.
  */
 
 export type SchedulerEvent = "online" | "visible" | "hidden";
@@ -36,6 +39,20 @@ export interface SchedulerOptions {
 
 type Listener = (status: SyncStatus) => void;
 
+interface QueuedRun {
+  opts: SyncOptions;
+  promise: Promise<SyncResult>;
+  resolve: (result: SyncResult) => void;
+}
+
+const EMPTY_RESULT: SyncResult = {
+  pushedMarks: 0,
+  pushedSessions: 0,
+  refreshed: false,
+  prefetched: 0,
+  error: null,
+};
+
 export class SyncScheduler {
   private readonly intervalMs: number;
   private readonly initialBackoffMs: number;
@@ -45,8 +62,8 @@ export class SyncScheduler {
   private listeners = new Set<Listener>();
   private unsubscribers: Array<() => void> = [];
   private started = false;
-  private inFlight = false;
-  private queued = false;
+  private current: Promise<SyncResult> | null = null;
+  private next: QueuedRun | null = null;
   private backoffMs = 0;
   private retryHandle: unknown = null;
   private tickHandle: unknown = null;
@@ -84,25 +101,30 @@ export class SyncScheduler {
   }
 
   /**
-   * Ask for a full sync soon. Coalesces: at most one sync runs at a time and
-   * at most one more is queued behind it. While backing off after a failure,
-   * only the pending count is refreshed; the backoff timer owns the retry.
+   * Ask for a full sync soon (fire-and-forget). While backing off after a
+   * failure, only the pending count is refreshed; the backoff timer owns the
+   * retry so user activity can't extend the backoff.
    */
   requestSync(): void {
     if (this.retryHandle !== null) {
       void this.refreshPending();
       return;
     }
-    if (this.inFlight) {
-      this.queued = true;
-      return;
-    }
-    void this.run({});
+    void this.enqueue({});
+  }
+
+  /**
+   * Run a full sync now and resolve with its result, even while backing off.
+   * For callers that must know the outcome (e.g. "is this article available?").
+   */
+  syncNow(): Promise<SyncResult> {
+    this.clearRetry();
+    return this.enqueue({});
   }
 
   /** Push-only, keepalive sync for pagehide / hidden: requests may outlive the page. */
   flushForUnload(): void {
-    void this.run({ pushOnly: true, keepalive: true });
+    void this.enqueue({ pushOnly: true, keepalive: true });
   }
 
   subscribe(listener: Listener): () => void {
@@ -117,12 +139,35 @@ export class SyncScheduler {
     return this.status;
   }
 
-  private async run(opts: SyncOptions): Promise<void> {
-    if (this.inFlight) {
-      this.queued = true;
-      return;
+  /** Single-flight entry point: runs now, or coalesces into the one queued follow-up. */
+  private enqueue(opts: SyncOptions): Promise<SyncResult> {
+    if (this.current) {
+      if (this.next) {
+        this.next.opts = mergeOptions(this.next.opts, opts);
+      } else {
+        let resolve!: (result: SyncResult) => void;
+        const promise = new Promise<SyncResult>((r) => (resolve = r));
+        this.next = { opts, promise, resolve };
+      }
+      return this.next.promise;
     }
-    this.inFlight = true;
+    const run = this.execute(opts);
+    this.current = run;
+    const onDone = (result: SyncResult) => {
+      this.current = null;
+      const queued = this.next;
+      this.next = null;
+      if (!queued) return;
+      // A failed run scheduled a retry; hand waiters that outcome instead of hammering.
+      if (this.retryHandle !== null) queued.resolve(result);
+      else void this.enqueue(queued.opts).then(queued.resolve);
+    };
+    void run.then(onDone);
+    return run;
+  }
+
+  /** One sync attempt. Never rejects; failures are folded into status and the result. */
+  private async execute(opts: SyncOptions): Promise<SyncResult> {
     this.setStatus({ syncing: true });
     let result: SyncResult;
     let unexpected: string | null = null;
@@ -130,7 +175,7 @@ export class SyncScheduler {
       result = await this.syncer.syncAll(opts);
     } catch (error) {
       // Non-SyncError: a bug, not a connectivity problem. Surface it and keep running.
-      result = { pushedMarks: 0, pushedSessions: 0, refreshed: false, prefetched: 0, error: null };
+      result = EMPTY_RESULT;
       unexpected = String(error);
     }
     const unsynced = await this.safePendingCount();
@@ -141,11 +186,7 @@ export class SyncScheduler {
       this.backoffMs = 0;
       this.setStatus({ online: true, syncing: false, unsynced, lastError: unexpected });
     }
-    this.inFlight = false;
-    if (this.queued) {
-      this.queued = false;
-      if (this.retryHandle === null) void this.run({});
-    }
+    return result;
   }
 
   private onOnline(): void {
@@ -162,7 +203,7 @@ export class SyncScheduler {
         : Math.min(this.backoffMs * 2, this.maxBackoffMs);
     this.retryHandle = this.env.setTimeout(() => {
       this.retryHandle = null;
-      void this.run({});
+      void this.enqueue({});
     }, this.backoffMs);
   }
 
@@ -179,7 +220,7 @@ export class SyncScheduler {
   }
 
   private async tick(): Promise<void> {
-    if (!this.env.isVisible() || this.retryHandle !== null || this.inFlight) return;
+    if (!this.env.isVisible() || this.retryHandle !== null || this.current) return;
     if ((await this.safePendingCount()) > 0) this.requestSync();
   }
 
@@ -199,4 +240,12 @@ export class SyncScheduler {
     this.status = { ...this.status, ...patch };
     for (const listener of this.listeners) listener(this.status);
   }
+}
+
+/** A queued run serves every waiter: full sync beats push-only; keepalive if anyone asked. */
+function mergeOptions(a: SyncOptions, b: SyncOptions): SyncOptions {
+  return {
+    pushOnly: Boolean(a.pushOnly && b.pushOnly),
+    keepalive: Boolean(a.keepalive || b.keepalive),
+  };
 }
