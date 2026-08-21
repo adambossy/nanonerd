@@ -28,6 +28,9 @@ class ArticleSummary(BaseModel):
     categories: list[str]
     added_at: datetime
     extracted_at: datetime | None
+    fidelity_status: str | None
+    fidelity_score: float | None
+    fidelity_reasons: list[str]
 
 
 class ChunkOut(BaseModel):

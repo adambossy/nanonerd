@@ -1,3 +1,5 @@
+export type FidelityStatus = "ok" | "degraded" | "not_article" | "blocked";
+
 export interface ArticleSummary {
   id: number;
   title: string;
@@ -12,6 +14,9 @@ export interface ArticleSummary {
   categories: string[];
   added_at: string;
   extracted_at: string | null;
+  fidelity_status: FidelityStatus | null;
+  fidelity_score: number | null;
+  fidelity_reasons: string[];
 }
 
 export interface ChunkData {

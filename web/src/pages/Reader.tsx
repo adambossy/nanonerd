@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { loadArticle, offline } from "../offline";
+import { fidelityNotice } from "../reader/fidelity";
 import { useReadTracking } from "../reader/useReadTracking";
 import { useReadingSession, type SessionTick } from "../reader/useReadingSession";
 import type { ArticleDetail } from "../types";
@@ -12,6 +13,7 @@ export default function Reader() {
   const articleId = Number(id);
   const [article, setArticle] = useState<ArticleDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
 
   // Persist at event time so nothing is lost if the tab closes; sync soon after.
   const onRead = useCallback(
@@ -106,6 +108,8 @@ export default function Reader() {
     return <main className="reader">loading…</main>;
   }
 
+  const notice = noticeDismissed ? null : fidelityNotice(article);
+
   return (
     <>
       <div className="reader-progress">
@@ -124,6 +128,18 @@ export default function Reader() {
             .join("")}
           <a href={article.url}>original</a>
         </p>
+        {notice && (
+          <p className="fidelity-notice">
+            <span>{notice}</span>
+            <button
+              className="fidelity-dismiss"
+              aria-label="dismiss"
+              onClick={() => setNoticeDismissed(true)}
+            >
+              ×
+            </button>
+          </p>
+        )}
         {article.chunks.map((chunk) => (
           <section
             key={chunk.id}

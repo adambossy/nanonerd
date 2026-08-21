@@ -18,6 +18,9 @@ export function article(overrides: Partial<StoredArticle> = {}): StoredArticle {
     categories: [],
     added_at: "2026-01-01T00:00:00Z",
     extracted_at: "2026-01-01T00:01:00Z",
+    fidelity_status: null,
+    fidelity_score: null,
+    fidelity_reasons: [],
     ...overrides,
   };
 }
