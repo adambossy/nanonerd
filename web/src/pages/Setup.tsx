@@ -15,8 +15,8 @@ export default function Setup() {
   return (
     <>
       <nav className="top-nav">
-        <Link className="brand" to="/">nano::nerd</Link>
-        <Link to="/">home</Link>
+        <Link className="brand" to="/library">nano::nerd</Link>
+        <Link to="/library">library</Link>
       </nav>
       <main className="setup">
         <h2>Browser extension (Chrome / Arc — recommended)</h2>

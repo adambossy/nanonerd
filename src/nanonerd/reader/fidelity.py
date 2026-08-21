@@ -522,11 +522,15 @@ def _text_loss_penalty(signals: dict[str, SignalValue]) -> _Penalty | None:
         return None
     ratio = float(signals["word_ratio"])
     reason = f"extraction kept only {ratio:.0%} of the source article text"
+    # Losing a fifth of an article is enough on its own: a dropped outro or a
+    # sources section is exactly what you notice once you are already reading.
     if ratio < 0.5:
         return _Penalty(0.55, reason)
     if ratio < 0.7:
-        return _Penalty(0.35, reason)
-    if ratio < 0.85:
+        return _Penalty(0.40, reason)
+    if ratio < 0.8:
+        return _Penalty(0.30, reason)
+    if ratio < 0.9:
         return _Penalty(0.15, reason)
     return None
 

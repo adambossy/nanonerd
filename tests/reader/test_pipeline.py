@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from nanonerd.reader import pipeline
-from nanonerd.reader.extract import Extraction, FetchError
+from nanonerd.reader.extract import Extraction, FetchError, NotArticleError
 from nanonerd.reader.models import Article, Base, Category
 
 CONTENT_HTML = (
@@ -167,6 +167,62 @@ def test_process_article_fetch_failure_marks_failed(monkeypatch):
     output = fetch_article(factory, article_id)
     assert output["status"] == "failed"
     assert "connection refused" in output["error"]
+
+
+def test_process_article_not_an_article_marks_failed_with_reason(monkeypatch):
+    factory = create_session_factory()
+    article_id = create_pending_article(factory)
+    monkeypatch.setattr(pipeline, "fetch_html", lambda url: "<html>raw</html>")
+
+    def reject(html, url):
+        raise NotArticleError("not an article: og:type is product.group")
+
+    monkeypatch.setattr(pipeline, "extract_article", reject)
+
+    pipeline.process_article(article_id, session_factory=factory)
+
+    output = fetch_article(factory, article_id)
+    expected_output = {
+        "status": "failed",
+        "error": "not an article: og:type is product.group",
+        "chunk_words": [],
+    }
+    assert {key: output[key] for key in expected_output} == expected_output
+
+
+def test_process_article_not_an_article_records_not_article_fidelity(monkeypatch):
+    # input
+    source_html = (
+        "<html><head><meta property='og:type' content='product.group'></head>"
+        "<body><div class='grid'>"
+        + "".join(f"<a href='/p/{i}'>Product {i} $99</a>" for i in range(60))
+        + "</div></body></html>"
+    )
+
+    # helper setup
+    factory = create_session_factory()
+    article_id = create_pending_article(factory)
+    monkeypatch.setattr(pipeline, "fetch_html", lambda url: source_html)
+
+    def reject(html, url):
+        raise NotArticleError("not an article: og:type is product.group")
+
+    monkeypatch.setattr(pipeline, "extract_article", reject)
+
+    # act
+    pipeline.process_article(article_id, session_factory=factory)
+    output = fetch_fidelity(factory, article_id)
+
+    # expected
+    expected_output = {
+        "status": "failed",
+        "fidelity_status": "not_article",
+        "reasons": ["page is not an article (og:type=product.group)"],
+        "checked": True,
+    }
+
+    # assert
+    assert output == expected_output
 
 
 def test_process_article_categorization_failure_is_nonfatal(monkeypatch):

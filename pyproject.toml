@@ -14,6 +14,7 @@ dependencies = [
     "fastapi>=0.115",
     "httpx>=0.27",
     "lxml>=5.2",
+    "nh3>=0.3.6",
     "psycopg[binary]>=3.2",
     "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.30",
@@ -73,6 +74,7 @@ ignore-names-in-files = [
     "test/**",
     "src/nanonerd/reader/api.py",
     "src/nanonerd/reader/main.py",
+    "src/nanonerd/reader/reprocess.py",
     "src/nanonerd/reader/stats.py",
     # Typer command functions are referenced by the decorator, not by name.
     "src/nanonerd/reader/judge.py",

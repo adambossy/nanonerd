@@ -1,3 +1,5 @@
+from pathlib import Path
+import re
 import socket
 from types import SimpleNamespace
 
@@ -5,7 +7,16 @@ import httpx
 import pytest
 
 from nanonerd.reader import extract
-from nanonerd.reader.extract import _ensure_public_http_url, extract_article
+from nanonerd.reader.chunking import chunk_html
+from nanonerd.reader.extract import (
+    NotArticleError,
+    _ensure_public_http_url,
+    extract_article,
+    resolve_base_url,
+)
+from nanonerd.reader.normalize import parse_document, parse_fragment
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 FIXTURE_HTML = """<!doctype html>
 <html>
@@ -41,6 +52,64 @@ FIXTURE_HTML = """<!doctype html>
 <footer>Copyright 2026</footer>
 </body>
 </html>"""
+
+PARAGRAPH = (
+    "This paragraph carries enough ordinary prose words that the extractor "
+    "treats the page as an article rather than a listing of short fragments, "
+    "and it repeats the point once more so the count is comfortably high."
+)
+
+RICH_HTML = f"""<!doctype html>
+<html>
+<head>
+  <title>Rich Post</title>
+  <meta property="og:type" content="article">
+  <link rel="canonical" href="https://example.com/posts/slug/">
+</head>
+<body>
+<article>
+  <h1>Rich Post</h1>
+  <p>{PARAGRAPH}</p>
+  <h2 id="first">First Section<a class="anchor" href="#first">#</a></h2>
+  <p>Use <strong>bold words</strong> and <em>italic words</em> here. {PARAGRAPH}</p>
+  <p>Run <code>glob</code> then <code>grep</code> to search files. {PARAGRAPH}</p>
+  <figure><img src="fig.png" alt="A figure"><figcaption>Figure one</figcaption></figure>
+  <p>Steps follow in order. {PARAGRAPH}</p>
+  <ol><li>First step of the list</li><li>Second step of the list</li></ol>
+  <pre><code>line one
+line two</code></pre>
+  <p>See <a href="../other-post">the other post</a>. {PARAGRAPH}</p>
+</article>
+<div id="comments" class="comments">
+  <h2>Comments</h2>
+  <div class="comment"><p>Commenter says thanks for the clear write-up.</p></div>
+</div>
+</body>
+</html>"""
+
+PRODUCT_HTML = """<!doctype html>
+<html><head><meta property="og:type" content="product.group"></head>
+<body><ul><li>Smock Teak Twill $245</li><li>Trucker Jacket $330</li></ul></body>
+</html>"""
+
+CAPTCHA_HTML = """<html lang="en"><head><title>nytimes.com</title></head>
+<body><p id="cmsg">Please enable JS and disable any ad blocker</p></body></html>"""
+
+
+def count(pattern, html):
+    return len(re.findall(pattern, html))
+
+
+def first_match(pattern, html):
+    match = re.search(pattern, html)
+    assert match is not None, pattern
+    return match.group(1)
+
+
+def extract_content(html, url="https://example.com/posts/slug"):
+    output = extract_article(html, url)
+    assert output is not None
+    return output.content_html
 
 
 def test_extract_article_returns_content_and_metadata():
@@ -85,6 +154,176 @@ def test_fetch_html_raises_fetch_error_carrying_status_and_body(monkeypatch):
     expected_output = {"status_code": 403, "body": "<html>bot wall</html>"}
 
     # assert
+    assert output == expected_output
+
+
+def test_extract_article_keeps_images_formatting_code_and_ordered_lists():
+    content = extract_content(RICH_HTML)
+
+    output = {
+        "img": count(r"<img\b", content),
+        "strong": count(r"<strong>", content),
+        "italic": count(r"<(em|i)>", content),
+        "inline_code": count(r"<code>(glob|grep)</code>", content),
+        "block_pre": count(r"<pre>line one\nline two</pre>", content),
+        "ol": count(r"<ol>", content),
+        "title_h1_dropped": "<h1>" not in content,
+    }
+
+    expected_output = {
+        "img": 1,
+        "strong": 1,
+        "italic": 1,
+        "inline_code": 2,
+        "block_pre": 1,
+        "ol": 1,
+        "title_h1_dropped": True,
+    }
+    assert output == expected_output
+
+
+def test_extract_article_absolutizes_urls_against_canonical_page_url():
+    content = extract_content(RICH_HTML, url="https://example.com/posts/slug")
+
+    output = {
+        "img_src": first_match(r'<img src="([^"]+)"', content),
+        "link_href": first_match(r'<a href="([^"]+)">the other post', content),
+    }
+
+    expected_output = {
+        "img_src": "https://example.com/posts/slug/fig.png",
+        "link_href": "https://example.com/posts/other-post",
+    }
+    assert output == expected_output
+
+
+def test_extract_article_strips_heading_permalink_anchor():
+    content = extract_content(RICH_HTML)
+    assert "<h2>First Section</h2>" in content
+
+
+def test_extract_article_excludes_comment_section():
+    content = extract_content(RICH_HTML)
+    assert "Commenter says" not in content
+
+
+def test_extract_article_output_is_sanitized_block_sequence():
+    content = extract_content(RICH_HTML)
+    root = parse_fragment(content)
+
+    output = {
+        "top_level_tags": sorted({str(child.tag) for child in root}),
+        "has_tail_text": any((child.tail or "").strip() for child in root),
+        "has_class_attrs": 'class="' in content,
+    }
+
+    expected_output = {
+        "top_level_tags": ["h2", "img", "ol", "p", "pre"],
+        "has_tail_text": False,
+        "has_class_attrs": False,
+    }
+    assert output == expected_output
+
+
+def test_extract_article_rejects_product_pages():
+    with pytest.raises(NotArticleError, match="not an article: og:type is product"):
+        extract_article(PRODUCT_HTML, "https://shop.example/collections/new")
+
+
+def test_extract_article_rejects_pages_without_prose():
+    with pytest.raises(NotArticleError, match="not an article: longest block has"):
+        extract_article(CAPTCHA_HTML, "https://www.nytimes.com/2026/opinion")
+
+
+@pytest.mark.parametrize(
+    ("head", "expected_output"),
+    [
+        ('<base href="https://cdn.example/base/">', "https://cdn.example/base/"),
+        (
+            '<link rel="canonical" href="https://example.com/posts/slug/">',
+            "https://example.com/posts/slug/",
+        ),
+        (
+            '<meta property="og:url" content="https://example.com/posts/slug/">',
+            "https://example.com/posts/slug/",
+        ),
+        (
+            '<link rel="canonical" href="https://other.example/syndicated/">',
+            "https://example.com/posts/slug",
+        ),
+        ("", "https://example.com/posts/slug"),
+    ],
+)
+def test_resolve_base_url_prefers_page_declared_location(
+    head: str, expected_output: str
+) -> None:
+    doc = parse_document(f"<html><head>{head}</head><body><p>x</p></body></html>")
+    output = resolve_base_url(doc, "https://example.com/posts/slug")
+    assert output == expected_output
+
+
+def load_fixture(name):
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_extract_article_lilog_fixture_recovers_figures_and_inline_code():
+    html = load_fixture("lilianweng_harness.html")
+
+    content = extract_content(
+        html, url="https://lilianweng.github.io/posts/2026-07-04-harness"
+    )
+    chunks = chunk_html(content)
+
+    output = {
+        "img": count(r"<img\b", content),
+        "img_absolute_to_post_dir": count(
+            r'<img src="https://lilianweng\.github\.io/posts/2026-07-04-harness/',
+            content,
+        ),
+        "pre": count(r"<pre>", content),
+        "inline_bash_code_in_paragraph": "(commonly via <code>bash</code> commands)"
+        in content,
+        "headings_with_hash": count(r"#</h[1-6]>", content)
+        + count(r"<h[1-6]>[^<]*<a[^>]*>#</a>", content),
+        "ol": count(r"<ol>", content),
+        "sum_chunk_words_over_5000": sum(c.word_count for c in chunks) > 5000,
+        "one_word_non_heading_chunks": sum(
+            1
+            for c in chunks
+            if c.word_count <= 1 and not re.match(r"<(img|h[1-6])", c.html)
+        ),
+    }
+
+    expected_output = {
+        "img": 18,
+        "img_absolute_to_post_dir": 18,
+        "pre": 1,
+        "inline_bash_code_in_paragraph": True,
+        "headings_with_hash": 0,
+        "ol": 7,
+        "sum_chunk_words_over_5000": True,
+        "one_word_non_heading_chunks": 0,
+    }
+    assert output == expected_output
+
+
+def test_extract_article_single_container_fixture_yields_many_chunks():
+    html = load_fixture("ordinaryabundance.html")
+
+    content = extract_content(html, url="https://ordinaryabundance.com")
+    chunks = chunk_html(content)
+
+    output = {
+        "chunk_count_over_40": len(chunks) > 40,
+        "max_chunk_words_under_100": max(c.word_count for c in chunks) < 100,
+        "total_words_over_1400": sum(c.word_count for c in chunks) > 1400,
+    }
+
+    expected_output = {
+        "chunk_count_over_40": True,
+        "max_chunk_words_under_100": True,
+        "total_words_over_1400": True,
+    }
     assert output == expected_output
 
 

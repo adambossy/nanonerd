@@ -31,6 +31,21 @@ export interface ArticleDetail extends ArticleSummary {
   chunks: ChunkData[];
 }
 
+export interface ResumeTarget {
+  article_id: number;
+  title: string;
+}
+
+export interface HistoryEntry {
+  chunk_id: number;
+  article_id: number;
+  article_title: string;
+  position: number;
+  word_count: number;
+  read_at: string;
+  snippet: string;
+}
+
 export interface StatsTotals {
   active_seconds: number;
   articles_saved: number;

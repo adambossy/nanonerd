@@ -68,8 +68,8 @@ export default function Stats() {
   return (
     <>
       <nav className="top-nav">
-        <Link className="brand" to="/">nano::nerd</Link>
-        <Link to="/">home</Link>
+        <Link className="brand" to="/library">nano::nerd</Link>
+        <Link to="/library">library</Link>
       </nav>
       <main className="stats">
         {failed && <p className="empty">Stats need a connection.</p>}

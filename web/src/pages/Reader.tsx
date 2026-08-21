@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { loadArticle, offline } from "../offline";
 import { fidelityNotice } from "../reader/fidelity";
 import { useReadTracking } from "../reader/useReadTracking";
 import { useReadingSession, type SessionTick } from "../reader/useReadingSession";
 import type { ArticleDetail } from "../types";
 
+const RESUME_FAB_FADE_DISTANCE = 120; // px of scroll over which the resume fab fades out
+
 type LoadState = "loading" | "ready" | "unavailable" | "invalid";
 
 export default function Reader() {
   const { id } = useParams();
+  const location = useLocation();
+  const resumed = Boolean((location.state as { resumed?: boolean } | null)?.resumed);
+  const [resumeFabOpacity, setResumeFabOpacity] = useState(1);
+  const [searchParams] = useSearchParams();
+  const targetChunk = searchParams.get("chunk");
   const articleId = Number(id);
   const [article, setArticle] = useState<ArticleDetail | null>(null);
   const [state, setState] = useState<LoadState>("loading");
@@ -40,6 +47,28 @@ export default function Reader() {
 
   const readIds = useReadTracking(article, onRead);
   useReadingSession(articleId, article !== null, onTick);
+  const resumeBaselineRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!resumed) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const baseline = resumeBaselineRef.current ?? window.scrollY;
+        const scrolled = window.scrollY - baseline;
+        setResumeFabOpacity(
+          Math.min(1, Math.max(0, 1 - scrolled / RESUME_FAB_FADE_DISTANCE)),
+        );
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [resumed]);
 
   useEffect(() => {
     if (!Number.isFinite(articleId)) {
@@ -70,16 +99,25 @@ export default function Reader() {
     };
   }, [articleId]);
 
-  // Open at the earliest unread chunk.
+  // Open at the requested chunk, otherwise at the earliest unread chunk.
   useEffect(() => {
     if (!article) return;
+    if (targetChunk) {
+      document.querySelector(`[data-chunk-id="${targetChunk}"]`)?.scrollIntoView();
+      return;
+    }
     const firstUnread = article.chunks.find((c) => !c.read);
     if (firstUnread && firstUnread.position > 0) {
       document
         .querySelector(`[data-chunk-id="${firstUnread.id}"]`)
         ?.scrollIntoView();
     }
-  }, [article]);
+    if (resumed) {
+      requestAnimationFrame(() => {
+        resumeBaselineRef.current = window.scrollY;
+      });
+    }
+  }, [article, targetChunk, resumed]);
 
   const percent = useMemo(() => {
     if (!article) return 0;
@@ -99,7 +137,7 @@ export default function Reader() {
             ? "Couldn't load this article."
             : "This article isn't available offline yet. It downloads the next time you're connected."}
         </p>
-        <Link to="/">back</Link>
+        <Link to="/library">back</Link>
       </main>
     );
   }
@@ -117,7 +155,7 @@ export default function Reader() {
       </div>
       <main className="reader">
         <nav className="top-nav" style={{ padding: 0 }}>
-          <Link className="brand" to="/">nano::nerd</Link>
+          <Link className="brand" to="/library">nano::nerd</Link>
           <span>{Math.round(percent)}%</span>
         </nav>
         <h1 className="article-title">{article.title}</h1>
@@ -149,6 +187,18 @@ export default function Reader() {
           />
         ))}
       </main>
+      {resumed && (
+        <Link
+          className="resume-fab"
+          to="/library"
+          style={{
+            opacity: resumeFabOpacity,
+            pointerEvents: resumeFabOpacity < 0.05 ? "none" : "auto",
+          }}
+        >
+          article list
+        </Link>
+      )}
     </>
   );
 }

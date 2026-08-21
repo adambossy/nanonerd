@@ -1,4 +1,4 @@
-import type { StatsResponse } from "./types";
+import type { HistoryEntry, ResumeTarget, StatsResponse } from "./types";
 
 // Network-only actions. Reading and progress tracking go through src/offline.
 
@@ -14,4 +14,12 @@ export async function retryArticle(id: number): Promise<void> {
 
 export function getStats(): Promise<StatsResponse> {
   return fetch("/api/stats").then((r) => asJson<StatsResponse>(r));
+}
+
+export function getResume(): Promise<ResumeTarget | null> {
+  return fetch("/api/resume").then((r) => asJson<ResumeTarget | null>(r));
+}
+
+export function getHistory(): Promise<HistoryEntry[]> {
+  return fetch("/api/history").then((r) => asJson<HistoryEntry[]>(r));
 }

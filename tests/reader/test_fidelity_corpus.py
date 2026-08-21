@@ -4,6 +4,10 @@ Fixtures under `tests/fixtures/fidelity/` are gzipped copies of pages that were
 actually saved to the reader, paired with the `content_html` the pipeline
 stored for them.  `<script>`/`<style>` bodies are stripped to keep the repo
 small (except for sample 13, whose bot-wall markers live in inline script).
+
+The extracted HTML is what the pipeline stored *before* the trafilatura
+patches landed, so it is a snapshot of a known-bad extractor. The chunk
+statistics, however, come from today's `chunk_html`.
 """
 
 import gzip
@@ -101,39 +105,51 @@ def test_judge_extraction_reports_paywall_truncation_for_substack():
     } == expected_output
 
 
-def test_judge_extraction_reports_chunk_word_bug_for_docs_page():
+def test_judge_extraction_still_flags_samples_whose_chunking_was_fixed():
+    """15 and 16 were degraded partly by chunking bugs, since fixed.
+
+    The chunker no longer produces one giant chunk (15) or word counts that
+    ignore tail text (16), so both samples now rest on text loss alone: each
+    still drops roughly a fifth of the source article. The chunk-shape rules
+    stay covered by the synthetic cases in test_fidelity.py.
+    """
     # input
-    sample_id = 16
+    input_samples = [15, 16]
 
     # act
-    output = judge_sample(sample_id, 200)
+    output = {
+        sample_id: judge_sample(sample_id, 200).status for sample_id in input_samples
+    }
 
     # expected
-    expected_output = {"chunk_word_ratio_below_10_percent": True, "status": "degraded"}
+    expected_output = {15: "degraded", 16: "degraded"}
 
     # assert
-    assert {
-        "chunk_word_ratio_below_10_percent": float(output.signals["chunk_word_ratio"])
-        < 0.1,
-        "status": output.status,
-    } == expected_output
+    assert output == expected_output
 
 
-def test_judge_extraction_reports_single_chunk_for_ordinaryabundance():
+def test_judge_extraction_no_longer_sees_chunk_defects_after_chunker_fix():
     # input
-    sample_id = 15
+    input_samples = [15, 16]
 
     # act
-    output = judge_sample(sample_id, 200)
+    output = {
+        sample_id: {
+            "single_chunk": int(judge_sample(sample_id, 200).signals["chunk_count"])
+            == 1,
+            "word_counts_wrong": float(
+                judge_sample(sample_id, 200).signals["chunk_word_ratio"]
+            )
+            < 0.9,
+        }
+        for sample_id in input_samples
+    }
 
     # expected
     expected_output = {
-        "chunk_count": 1,
-        "top_reason": "the whole article landed in a single chunk",
+        sample_id: {"single_chunk": False, "word_counts_wrong": False}
+        for sample_id in input_samples
     }
 
     # assert
-    assert {
-        "chunk_count": output.signals["chunk_count"],
-        "top_reason": output.reasons[0],
-    } == expected_output
+    assert output == expected_output
