@@ -45,6 +45,14 @@ class Article(Base):
     extracted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    # Faithful-snapshot state: none | pending | ready | failed
+    snapshot_status: Mapped[str] = mapped_column(String(16), default="none")
+    snapshot_available: Mapped[bool] = mapped_column(default=False)
+    snapshot_bytes: Mapped[int] = mapped_column(default=0)
+    snapshot_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    snapshot_error: Mapped[str | None] = mapped_column(Text, default=None)
 
     chunks: Mapped[list["Chunk"]] = relationship(
         back_populates="article",
@@ -52,6 +60,25 @@ class Article(Base):
         order_by="Chunk.position",
     )
     categories: Mapped[list["Category"]] = relationship(secondary=article_categories)
+    snapshot: Mapped["ArticleSnapshot | None"] = relationship(
+        back_populates="article", cascade="all, delete-orphan", uselist=False
+    )
+
+
+class ArticleSnapshot(Base):
+    """Self-contained, chunk-tagged HTML copy of the source page.
+
+    Kept in its own table so article listings never load the (multi-MB)
+    payload; single-user scale makes a blob store unnecessary for now."""
+
+    __tablename__ = "article_snapshots"
+
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), primary_key=True
+    )
+    html: Mapped[str] = mapped_column(Text)
+
+    article: Mapped[Article] = relationship(back_populates="snapshot")
 
 
 class Chunk(Base):

@@ -37,8 +37,17 @@ class ChunkOut(BaseModel):
     read: bool
 
 
+class SnapshotState(BaseModel):
+    status: str
+    available: bool
+    bytes: int
+    captured_at: datetime | None
+    error: str | None
+
+
 class ArticleDetail(ArticleSummary):
     chunks: list[ChunkOut]
+    snapshot: SnapshotState
 
 
 class ProgressRequest(BaseModel):
