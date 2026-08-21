@@ -19,7 +19,9 @@ export default function Start() {
     return <main className="reader">loading…</main>;
   }
   if (target) {
-    return <Navigate to={`/read/${target.article_id}`} replace />;
+    return (
+      <Navigate to={`/read/${target.article_id}`} replace state={{ resumed: true }} />
+    );
   }
   return <Home />;
 }

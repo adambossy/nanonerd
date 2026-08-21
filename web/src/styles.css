@@ -127,6 +127,22 @@ a { color: inherit; }
   border-radius: 2px;
   background: var(--rail);
 }
+.resume-fab {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  padding: 0.6rem 1.2rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  transition: opacity 0.15s linear;
+  z-index: 10;
+}
 .reader img { max-width: 100%; height: auto; }
 .reader pre { overflow-x: auto; font-size: 0.85rem; }
 .reader blockquote { border-left: 3px solid var(--border); margin-left: 0; padding-left: 1rem; color: var(--muted); }

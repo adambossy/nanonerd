@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { getArticle } from "../api";
 import { useReadTracking } from "../reader/useReadTracking";
 import { useReadingSession } from "../reader/useReadingSession";
 import type { ArticleDetail } from "../types";
 
+const RESUME_FAB_FADE_DISTANCE = 120; // px of scroll over which the resume fab fades out
+
 export default function Reader() {
   const { id } = useParams();
+  const location = useLocation();
+  const resumed = Boolean((location.state as { resumed?: boolean } | null)?.resumed);
+  const [resumeFabOpacity, setResumeFabOpacity] = useState(1);
   const [searchParams] = useSearchParams();
   const targetChunk = searchParams.get("chunk");
   const articleId = Number(id);
@@ -14,6 +19,28 @@ export default function Reader() {
   const [failed, setFailed] = useState(false);
   const readIds = useReadTracking(articleId, article);
   useReadingSession(articleId, article !== null);
+  const resumeBaselineRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!resumed) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const baseline = resumeBaselineRef.current ?? window.scrollY;
+        const scrolled = window.scrollY - baseline;
+        setResumeFabOpacity(
+          Math.min(1, Math.max(0, 1 - scrolled / RESUME_FAB_FADE_DISTANCE)),
+        );
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [resumed]);
 
   useEffect(() => {
     if (!Number.isFinite(articleId)) {
@@ -38,7 +65,12 @@ export default function Reader() {
         .querySelector(`[data-chunk-id="${firstUnread.id}"]`)
         ?.scrollIntoView();
     }
-  }, [article, targetChunk]);
+    if (resumed) {
+      requestAnimationFrame(() => {
+        resumeBaselineRef.current = window.scrollY;
+      });
+    }
+  }, [article, targetChunk, resumed]);
 
   const percent = useMemo(() => {
     if (!article) return 0;
@@ -90,6 +122,18 @@ export default function Reader() {
           />
         ))}
       </main>
+      {resumed && (
+        <Link
+          className="resume-fab"
+          to="/library"
+          style={{
+            opacity: resumeFabOpacity,
+            pointerEvents: resumeFabOpacity < 0.05 ? "none" : "auto",
+          }}
+        >
+          article list
+        </Link>
+      )}
     </>
   );
 }
