@@ -7,14 +7,15 @@ import {
   type ReactNode,
 } from "react";
 
-/** Horizontal distance (as a fraction of row width) past which a swipe commits. */
-const COMMIT_FRACTION = 0.35;
+/** Width of the strip revealed behind the row. The icon sits centered in it, and the moment the
+ *  row has been dragged this far the swipe completes — no need to keep dragging or to release. */
+const REVEAL_PX = 120;
 /** Pointer must move this far before we decide whether it's a horizontal swipe or a vertical scroll. */
 const AXIS_LOCK_PX = 8;
-/** Icon scale while dragging: grows from MIN toward MAX as the finger approaches the threshold... */
-const ICON_SCALE_MIN = 0.8;
+/** Icon scale while dragging: grows from MIN toward MAX as the row approaches REVEAL_PX... */
+const ICON_SCALE_MIN = 0.75;
 const ICON_SCALE_MAX = 1.45;
-/** ...then snaps down to this settled size once the swipe commits. */
+/** ...then snaps down to this settled size once the swipe completes. */
 const ICON_SCALE_SETTLED = 1.1;
 const LEAVE_MS = 220;
 
@@ -48,12 +49,9 @@ export default function SwipeRow({
   const axisRef = useRef<"x" | "y" | null>(null);
   const movedRef = useRef(false);
 
-  const width = rowRef.current?.offsetWidth ?? 0;
-  const threshold = width * COMMIT_FRACTION;
-  const committed = threshold > 0 && Math.abs(dx) >= threshold;
   const side: Side | null = dx > 0 ? "right" : dx < 0 ? "left" : null;
-  const progress = threshold > 0 ? Math.min(Math.abs(dx) / threshold, 1) : 0;
-  const iconScale = committed
+  const progress = Math.min(Math.abs(dx) / REVEAL_PX, 1);
+  const iconScale = leaving
     ? ICON_SCALE_SETTLED
     : ICON_SCALE_MIN + (ICON_SCALE_MAX - ICON_SCALE_MIN) * progress;
 
@@ -62,6 +60,25 @@ export default function SwipeRow({
     setDragging(false);
     setDx(0);
   }, []);
+
+  const complete = (event: PointerEvent<HTMLDivElement>, which: Side) => {
+    axisRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const width = rowRef.current?.offsetWidth ?? REVEAL_PX;
+    setLeaving(which);
+    setDragging(false);
+    setDx(which === "right" ? width : -width);
+    window.setTimeout(() => {
+      const result = which === "right" ? onSwipeRight() : onSwipeLeft();
+      void Promise.resolve(result).finally(() => {
+        // No-op if the row unmounted (success); restores it if it's still here (failure).
+        setLeaving(null);
+        setDx(0);
+      });
+    }, LEAVE_MS);
+  };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (leaving || event.button !== 0) return;
@@ -86,6 +103,10 @@ export default function SwipeRow({
     if (axisRef.current !== "x") return;
 
     movedRef.current = true;
+    if (Math.abs(moveX) >= REVEAL_PX) {
+      complete(event, moveX > 0 ? "right" : "left");
+      return;
+    }
     setDx(moveX);
   };
 
@@ -97,20 +118,7 @@ export default function SwipeRow({
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    if (committed && side) {
-      setLeaving(side);
-      setDragging(false);
-      setDx(side === "right" ? width : -width);
-      window.setTimeout(() => {
-        const result = side === "right" ? onSwipeRight() : onSwipeLeft();
-        void Promise.resolve(result).finally(() => {
-          // No-op if the row unmounted (success); restores it if it's still here (failure).
-          setLeaving(null);
-          setDx(0);
-        });
-      }, LEAVE_MS);
-      return;
-    }
+    // Released short of REVEAL_PX: spring back.
     reset();
   };
 
@@ -125,11 +133,16 @@ export default function SwipeRow({
 
   const bgClass =
     side === "right" ? "swipe-bg swipe-bg-archive" : "swipe-bg swipe-bg-delete";
+  // Icon is centered within the REVEAL_PX strip on its side of the row.
+  const iconStyle =
+    side === "right"
+      ? { left: REVEAL_PX / 2, transform: `translate(-50%, -50%) scale(${iconScale})` }
+      : { right: REVEAL_PX / 2, transform: `translate(50%, -50%) scale(${iconScale})` };
 
   return (
     <div
       ref={rowRef}
-      className={`swipe-row${dragging ? " is-dragging" : ""}${committed ? " is-committed" : ""}`}
+      className={`swipe-row${dragging ? " is-dragging" : ""}${leaving ? " is-committed" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -140,7 +153,7 @@ export default function SwipeRow({
     >
       {side && (
         <div className={bgClass} aria-hidden="true">
-          <span className="swipe-icon" style={{ transform: `scale(${iconScale})` }}>
+          <span className="swipe-icon" style={iconStyle}>
             {side === "right" ? rightSwipeIcon : leftSwipeIcon}
           </span>
         </div>

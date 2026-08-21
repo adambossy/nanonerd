@@ -73,17 +73,17 @@ a { color: inherit; }
 .swipe-bg {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 1.4rem;
   color: #fff;
   opacity: 0.55;
   transition: opacity 140ms ease-out;
 }
-.swipe-bg-archive { justify-content: flex-start; background: var(--rail); }
-.swipe-bg-delete { justify-content: flex-end; background: var(--danger); }
+.swipe-bg-archive { background: var(--rail); }
+.swipe-bg-delete { background: var(--danger); }
 .is-committed .swipe-bg { opacity: 1; }
 .swipe-icon {
+  /* Horizontal position (left/right) and the translate+scale transform are set inline by SwipeRow. */
+  position: absolute;
+  top: 50%;
   display: inline-flex;
   line-height: 0;
   transform-origin: center;
