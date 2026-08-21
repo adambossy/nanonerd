@@ -27,6 +27,7 @@ class ArticleSummary(BaseModel):
     percent_read: float
     categories: list[str]
     added_at: datetime
+    extracted_at: datetime | None
 
 
 class ChunkOut(BaseModel):
@@ -41,8 +42,14 @@ class ArticleDetail(ArticleSummary):
     chunks: list[ChunkOut]
 
 
+class ReadMark(BaseModel):
+    chunk_id: int
+    read_at: datetime
+
+
 class ProgressRequest(BaseModel):
-    chunk_ids: list[int]
+    chunk_ids: list[int] = []
+    marks: list[ReadMark] = []
 
 
 class ProgressResponse(BaseModel):

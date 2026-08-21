@@ -56,7 +56,46 @@ def _summary(article: Article, read_words: int) -> ArticleSummary:
         percent_read=_percent(read_words, article.word_count),
         categories=[category.name for category in article.categories],
         added_at=article.added_at,
+        extracted_at=article.extracted_at,
     )
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _requested_read_times(
+    payload: ProgressRequest, now: datetime
+) -> dict[int, datetime]:
+    """Earliest requested read time per chunk, never later than now."""
+    times = {chunk_id: now for chunk_id in payload.chunk_ids}
+    for mark in payload.marks:
+        requested = min(_as_utc(mark.read_at), now)
+        existing = times.get(mark.chunk_id)
+        times[mark.chunk_id] = (
+            requested if existing is None else min(existing, requested)
+        )
+    return times
+
+
+def _apply_read_times(
+    session: Session, article_id: int, times: dict[int, datetime]
+) -> None:
+    """Set read_at to the earliest known time; unknown/foreign ids are ignored."""
+    if not times:
+        return
+    chunks = session.scalars(
+        select(Chunk).where(Chunk.article_id == article_id, Chunk.id.in_(times))
+    ).all()
+    rows = []
+    for chunk in chunks:
+        requested = times[chunk.id]
+        current = _as_utc(chunk.read_at) if chunk.read_at is not None else None
+        if current is None or requested < current:
+            rows.append({"id": chunk.id, "read_at": requested})
+    if rows:
+        session.execute(update(Chunk), rows)
+        session.commit()
 
 
 @router.post("/articles", response_model=SaveResponse)
@@ -121,17 +160,9 @@ def mark_progress(
     article = session.get(Article, article_id)
     if article is None:
         raise HTTPException(status_code=404, detail="article not found")
-    if payload.chunk_ids:
-        session.execute(
-            update(Chunk)
-            .where(
-                Chunk.article_id == article_id,
-                Chunk.id.in_(payload.chunk_ids),
-                Chunk.read_at.is_(None),
-            )
-            .values(read_at=datetime.now(UTC))
-        )
-        session.commit()
+    _apply_read_times(
+        session, article_id, _requested_read_times(payload, datetime.now(UTC))
+    )
     return ProgressResponse(
         percent_read=_percent(_read_words(session, article_id), article.word_count)
     )

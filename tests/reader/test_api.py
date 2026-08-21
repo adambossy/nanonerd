@@ -103,3 +103,96 @@ def test_retry_failed_article_requeues(monkeypatch):
     output = client.post(f"/api/articles/{article_id}/retry").json()
 
     assert (output["status"], processed) == ("pending", [article_id])
+
+
+def _read_at_by_position(factory, article_id):
+    with factory() as session:
+        article = session.get(Article, article_id)
+        return [
+            chunk.read_at.replace(tzinfo=UTC) if chunk.read_at else None
+            for chunk in article.chunks
+        ]
+
+
+def test_list_articles_includes_extracted_at(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    seed_ready_article(factory)
+
+    output = client.get("/api/articles").json()[0]
+
+    assert "extracted_at" in output
+
+
+def test_mark_progress_with_marks_uses_client_timestamp(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, chunk_ids = seed_ready_article(factory)
+    read_at = "2026-01-02T03:04:05Z"
+
+    client.post(
+        f"/api/articles/{article_id}/progress",
+        json={"marks": [{"chunk_id": chunk_ids[1], "read_at": read_at}]},
+    )
+
+    output = _read_at_by_position(factory, article_id)[1]
+    assert output == datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+
+
+def test_mark_progress_earliest_read_at_wins(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, chunk_ids = seed_ready_article(factory)
+    later = {"chunk_id": chunk_ids[1], "read_at": "2026-01-05T00:00:00Z"}
+    earlier = {"chunk_id": chunk_ids[1], "read_at": "2026-01-01T00:00:00Z"}
+
+    client.post(f"/api/articles/{article_id}/progress", json={"marks": [later]})
+    client.post(f"/api/articles/{article_id}/progress", json={"marks": [earlier]})
+
+    output = _read_at_by_position(factory, article_id)[1]
+    assert output == datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def test_mark_progress_clamps_future_read_at_to_now(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, chunk_ids = seed_ready_article(factory)
+    before = datetime.now(UTC)
+
+    client.post(
+        f"/api/articles/{article_id}/progress",
+        json={
+            "marks": [{"chunk_id": chunk_ids[1], "read_at": "2999-01-01T00:00:00Z"}]
+        },
+    )
+
+    output = _read_at_by_position(factory, article_id)[1]
+    assert before <= output <= datetime.now(UTC)
+
+
+def test_mark_progress_ignores_unknown_and_foreign_chunk_ids(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, _chunk_ids = seed_ready_article(factory)
+
+    response = client.post(
+        f"/api/articles/{article_id}/progress",
+        json={
+            "chunk_ids": [999999],
+            "marks": [{"chunk_id": 999998, "read_at": "2026-01-01T00:00:00Z"}],
+        },
+    )
+
+    assert (response.status_code, response.json()["percent_read"]) == (200, 25.0)
+
+
+def test_mark_progress_replay_is_idempotent(monkeypatch):
+    client, factory, _processed = create_test_client(monkeypatch)
+    article_id, chunk_ids = seed_ready_article(factory)
+    payload = {
+        "marks": [{"chunk_id": chunk_ids[1], "read_at": "2026-01-01T00:00:00Z"}]
+    }
+
+    first = client.post(f"/api/articles/{article_id}/progress", json=payload).json()
+    second = client.post(f"/api/articles/{article_id}/progress", json=payload).json()
+
+    assert (first, second, _read_at_by_position(factory, article_id)[1]) == (
+        {"percent_read": 100.0},
+        {"percent_read": 100.0},
+        datetime(2026, 1, 1, tzinfo=UTC),
+    )
