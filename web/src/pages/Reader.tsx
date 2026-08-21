@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getArticle } from "../api";
 import { useReadTracking } from "../reader/useReadTracking";
 import { useReadingSession } from "../reader/useReadingSession";
@@ -7,6 +7,8 @@ import type { ArticleDetail } from "../types";
 
 export default function Reader() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const targetChunk = searchParams.get("chunk");
   const articleId = Number(id);
   const [article, setArticle] = useState<ArticleDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -23,16 +25,20 @@ export default function Reader() {
       .catch(() => setFailed(true));
   }, [articleId]);
 
-  // Open at the earliest unread chunk.
+  // Open at the requested chunk, otherwise at the earliest unread chunk.
   useEffect(() => {
     if (!article) return;
+    if (targetChunk) {
+      document.querySelector(`[data-chunk-id="${targetChunk}"]`)?.scrollIntoView();
+      return;
+    }
     const firstUnread = article.chunks.find((c) => !c.read);
     if (firstUnread && firstUnread.position > 0) {
       document
         .querySelector(`[data-chunk-id="${firstUnread.id}"]`)
         ?.scrollIntoView();
     }
-  }, [article]);
+  }, [article, targetChunk]);
 
   const percent = useMemo(() => {
     if (!article) return 0;
@@ -48,7 +54,7 @@ export default function Reader() {
     return (
       <main className="reader">
         <p>Couldn't load this article.</p>
-        <Link to="/">back</Link>
+        <Link to="/library">back</Link>
       </main>
     );
   }
@@ -64,7 +70,7 @@ export default function Reader() {
       </div>
       <main className="reader">
         <nav className="top-nav" style={{ padding: 0 }}>
-          <Link className="brand" to="/">nano::nerd</Link>
+          <Link className="brand" to="/library">nano::nerd</Link>
           <span>{Math.round(percent)}%</span>
         </nav>
         <h1 className="article-title">{article.title}</h1>

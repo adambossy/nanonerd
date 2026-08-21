@@ -1,4 +1,10 @@
-import type { ArticleDetail, ArticleSummary, StatsResponse } from "./types";
+import type {
+  ArticleDetail,
+  ArticleSummary,
+  HistoryEntry,
+  ResumeTarget,
+  StatsResponse,
+} from "./types";
 
 async function asJson<T>(response: Response): Promise<T> {
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -43,4 +49,12 @@ export function beaconProgress(id: number, chunkIds: number[]): void {
 
 export function getStats(): Promise<StatsResponse> {
   return fetch("/api/stats").then((r) => asJson<StatsResponse>(r));
+}
+
+export function getResume(): Promise<ResumeTarget | null> {
+  return fetch("/api/resume").then((r) => asJson<ResumeTarget | null>(r));
+}
+
+export function getHistory(): Promise<HistoryEntry[]> {
+  return fetch("/api/history").then((r) => asJson<HistoryEntry[]>(r));
 }

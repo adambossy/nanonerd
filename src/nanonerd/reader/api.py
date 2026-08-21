@@ -6,14 +6,17 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from nanonerd.reader import pipeline
+from nanonerd.reader.chunking import html_to_text
 from nanonerd.reader.db import get_session
 from nanonerd.reader.models import Article, Chunk, ReadingSession
 from nanonerd.reader.schemas import (
     ArticleDetail,
     ArticleSummary,
     ChunkOut,
+    HistoryEntry,
     ProgressRequest,
     ProgressResponse,
+    ResumeTarget,
     SaveRequest,
     SaveResponse,
     SessionCreated,
@@ -25,6 +28,8 @@ from nanonerd.reader.urlnorm import normalize_url
 router = APIRouter(prefix="/api")
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+SNIPPET_CHARS = 140
 
 
 def _percent(read_words: int, total_words: int) -> float:
@@ -152,6 +157,69 @@ def retry_article(
     session.commit()
     background.add_task(pipeline.process_article, article.id)
     return SaveResponse(id=article.id, duplicate=False, status="pending")
+
+
+def _first_resumable(session: Session, article_ids: list[int]) -> Article | None:
+    for article_id in article_ids:
+        article = session.get(Article, article_id)
+        if article is None or article.status != "ready":
+            continue
+        if _read_words(session, article_id) < article.word_count:
+            return article
+    return None
+
+
+def _snippet(html: str) -> str:
+    text = html_to_text(html)
+    if len(text) <= SNIPPET_CHARS:
+        return text
+    return text[:SNIPPET_CHARS].rstrip() + "…"
+
+
+@router.get("/resume", response_model=ResumeTarget | None)
+def get_resume(session: SessionDep) -> ResumeTarget | None:
+    by_session = session.execute(
+        select(ReadingSession.article_id)
+        .group_by(ReadingSession.article_id)
+        .order_by(func.max(ReadingSession.last_active_at).desc())
+    ).scalars()
+    article = _first_resumable(session, list(by_session))
+    if article is None:
+        by_chunk = session.execute(
+            select(Chunk.article_id)
+            .where(Chunk.read_at.is_not(None))
+            .group_by(Chunk.article_id)
+            .order_by(func.max(Chunk.read_at).desc())
+        ).scalars()
+        article = _first_resumable(session, list(by_chunk))
+    if article is None:
+        return None
+    return ResumeTarget(article_id=article.id, title=article.title)
+
+
+@router.get("/history", response_model=list[HistoryEntry])
+def get_history(session: SessionDep, limit: int = 200) -> list[HistoryEntry]:
+    rows = session.execute(
+        select(Chunk, Article.title)
+        .join(Article, Article.id == Chunk.article_id)
+        .where(Chunk.read_at.is_not(None))
+        # Chunks marked in the same batch share a read_at; position breaks the tie.
+        .order_by(Chunk.read_at.desc(), Chunk.position.desc())
+        .limit(limit)
+    ).all()
+    return [
+        HistoryEntry(
+            chunk_id=chunk.id,
+            article_id=chunk.article_id,
+            article_title=title,
+            position=chunk.position,
+            word_count=chunk.word_count,
+            read_at=chunk.read_at,
+            snippet=_snippet(chunk.html),
+        )
+        for chunk, title in rows
+        if chunk.read_at is not None
+    ]
 
 
 @router.post("/articles/{article_id}/sessions", response_model=SessionCreated)

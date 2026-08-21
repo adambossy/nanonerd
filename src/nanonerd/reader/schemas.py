@@ -62,6 +62,21 @@ class SessionState(BaseModel):
     active_seconds: int
 
 
+class ResumeTarget(BaseModel):
+    article_id: int
+    title: str
+
+
+class HistoryEntry(BaseModel):
+    chunk_id: int
+    article_id: int
+    article_title: str
+    position: int
+    word_count: int
+    read_at: datetime
+    snippet: str
+
+
 class StatsTotals(BaseModel):
     active_seconds: int
     articles_saved: int

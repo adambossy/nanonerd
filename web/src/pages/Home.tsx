@@ -85,8 +85,9 @@ export default function Home() {
   return (
     <>
       <nav className="top-nav">
-        <Link className="brand" to="/">nano::nerd</Link>
+        <Link className="brand" to="/library">nano::nerd</Link>
         <span className="nav-links">
+          <Link to="/history">history</Link>
           <Link to="/stats">stats</Link>
           <Link to="/setup">setup</Link>
         </span>
