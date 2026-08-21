@@ -130,11 +130,13 @@ function Card({
 export default function Home() {
   const [articles, setArticles] = useState<ArticleSummary[] | null>(null);
 
-  const refresh = useCallback(() => {
-    listArticles()
-      .then(setArticles)
-      .catch(() => undefined);
-  }, []);
+  const refresh = useCallback(
+    () =>
+      listArticles()
+        .then(setArticles)
+        .catch(() => undefined),
+    [],
+  );
 
   useEffect(() => {
     refresh();
