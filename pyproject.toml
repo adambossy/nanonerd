@@ -15,8 +15,10 @@ dependencies = [
     "httpx>=0.27",
     "lxml>=5.2",
     "psycopg[binary]>=3.2",
+    "python-dotenv>=1.2.2",
     "sqlalchemy>=2.0.30",
     "trafilatura>=2.0",
+    "typer>=0.27.1",
     "uvicorn[standard]>=0.30",
 ]
 
@@ -72,6 +74,8 @@ ignore-names-in-files = [
     "src/nanonerd/reader/api.py",
     "src/nanonerd/reader/main.py",
     "src/nanonerd/reader/stats.py",
+    # Typer command functions are referenced by the decorator, not by name.
+    "src/nanonerd/reader/judge.py",
 ]
 ignore-definitions = [
     "Migration",
