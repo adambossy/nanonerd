@@ -1,5 +1,6 @@
 """Where cached article media lives: local disk for dev, S3-compatible for prod."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Protocol
@@ -7,6 +8,8 @@ from typing import Protocol
 import boto3
 
 from nanonerd.reader.errors import ReaderError
+
+logger = logging.getLogger(__name__)
 
 
 class StorageError(ReaderError):
@@ -62,12 +65,32 @@ class S3Storage:
         return f"{self._public_base_url}/{key}"
 
 
+class UnavailableStorage:
+    """Stand-in when no durable store is configured on an ephemeral host.
+
+    Every `put` fails, so `cache_images` leaves each image on its origin URL
+    (still renders, just not re-hosted) rather than writing `/media/...` links
+    that point at a disk nothing serves.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self._reason = reason
+
+    def put(self, key: str, data: bytes, content_type: str) -> str:
+        raise StorageError(self._reason)
+
+
 def storage_from_env() -> Storage:
     """S3 when `MEDIA_S3_BUCKET` (or Tigris' `BUCKET_NAME`) is set, else local disk.
 
     Fly Tigris injects `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
     `AWS_ENDPOINT_URL_S3` and `BUCKET_NAME`; boto3 picks the credentials up
     from the environment on its own.
+
+    On Fly (`FLY_APP_NAME` set) the root disk is ephemeral and the web process
+    only serves `/media` when it is itself on local storage, so without a
+    bucket — and without an explicit `MEDIA_DIR` opt-in — images are left
+    un-cached instead of silently stored where nobody can read them.
     """
     bucket = os.environ.get("MEDIA_S3_BUCKET") or os.environ.get("BUCKET_NAME")
     if bucket:
@@ -80,5 +103,13 @@ def storage_from_env() -> Storage:
         return S3Storage(
             bucket=bucket, public_base_url=public_base, endpoint_url=endpoint
         )
-    root = Path(os.environ.get("MEDIA_DIR", "./media"))
+    media_dir = os.environ.get("MEDIA_DIR")
+    if media_dir is None and os.environ.get("FLY_APP_NAME"):
+        reason = (
+            "no media bucket configured (set BUCKET_NAME/MEDIA_S3_BUCKET, or "
+            "MEDIA_DIR to opt into local disk); images will not be cached"
+        )
+        logger.warning(reason)
+        return UnavailableStorage(reason)
+    root = Path(media_dir or "./media")
     return LocalStorage(root, base_url=os.environ.get("MEDIA_BASE_URL", "/media"))

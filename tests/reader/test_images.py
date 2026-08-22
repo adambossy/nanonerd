@@ -241,3 +241,37 @@ def test_local_storage_rejects_escaping_keys(tmp_path):
 
 def test_fetch_user_agent_is_phone_class():
     assert "iPhone" in fetch.USER_AGENT
+
+
+def test_storage_from_env_refuses_local_disk_on_fly(monkeypatch):
+    """On Fly without a bucket the disk is ephemeral: never store there, so
+    images keep their origin URLs instead of dead `/media/...` links."""
+    from nanonerd.reader.storage import storage_from_env
+
+    for name in ("MEDIA_S3_BUCKET", "BUCKET_NAME", "MEDIA_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("FLY_APP_NAME", "nanonerd-reader")
+    storage = storage_from_env()
+    assert not isinstance(storage, LocalStorage)
+    with pytest.raises(StorageError):
+        storage.put("articles/1/x.png", b"png", "image/png")
+
+
+def test_storage_from_env_honours_explicit_media_dir_on_fly(monkeypatch, tmp_path):
+    from nanonerd.reader.storage import storage_from_env
+
+    for name in ("MEDIA_S3_BUCKET", "BUCKET_NAME"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("FLY_APP_NAME", "nanonerd-reader")
+    monkeypatch.setenv("MEDIA_DIR", str(tmp_path))
+    storage = storage_from_env()
+    assert isinstance(storage, LocalStorage)
+    assert storage.put("a/b.png", b"png", "image/png") == "/media/a/b.png"
+
+
+def test_storage_from_env_defaults_to_local_disk_off_fly(monkeypatch):
+    from nanonerd.reader.storage import storage_from_env
+
+    for name in ("MEDIA_S3_BUCKET", "BUCKET_NAME", "MEDIA_DIR", "FLY_APP_NAME"):
+        monkeypatch.delenv(name, raising=False)
+    assert isinstance(storage_from_env(), LocalStorage)
