@@ -7,7 +7,7 @@ import pytest
 
 from nanonerd.reader import fetch
 from nanonerd.reader.images import MAX_WIDTH, cache_images, process_image
-from nanonerd.reader.storage import LocalStorage, StorageError
+from nanonerd.reader.storage import LocalStorage, StorageError, storage_from_env
 
 
 class RecordingStorage:
@@ -246,8 +246,6 @@ def test_fetch_user_agent_is_phone_class():
 def test_storage_from_env_refuses_local_disk_on_fly(monkeypatch):
     """On Fly without a bucket the disk is ephemeral: never store there, so
     images keep their origin URLs instead of dead `/media/...` links."""
-    from nanonerd.reader.storage import storage_from_env
-
     for name in ("MEDIA_S3_BUCKET", "BUCKET_NAME", "MEDIA_DIR"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("FLY_APP_NAME", "nanonerd-reader")
@@ -258,8 +256,6 @@ def test_storage_from_env_refuses_local_disk_on_fly(monkeypatch):
 
 
 def test_storage_from_env_honours_explicit_media_dir_on_fly(monkeypatch, tmp_path):
-    from nanonerd.reader.storage import storage_from_env
-
     for name in ("MEDIA_S3_BUCKET", "BUCKET_NAME"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("FLY_APP_NAME", "nanonerd-reader")
@@ -270,8 +266,6 @@ def test_storage_from_env_honours_explicit_media_dir_on_fly(monkeypatch, tmp_pat
 
 
 def test_storage_from_env_defaults_to_local_disk_off_fly(monkeypatch):
-    from nanonerd.reader.storage import storage_from_env
-
     for name in ("MEDIA_S3_BUCKET", "BUCKET_NAME", "MEDIA_DIR", "FLY_APP_NAME"):
         monkeypatch.delenv(name, raising=False)
     assert isinstance(storage_from_env(), LocalStorage)
