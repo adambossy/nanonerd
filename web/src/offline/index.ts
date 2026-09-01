@@ -1,4 +1,5 @@
 import { IdbStore } from "./idbStore";
+import { imageWarmer } from "./imageWarmer";
 import { MemoryStore } from "./memoryStore";
 import { SyncScheduler, type SchedulerEnv } from "./scheduler";
 import type { LocalStore } from "./store";
@@ -52,7 +53,7 @@ export function browserEnv(): SchedulerEnv {
 export function createOffline(): Offline {
   const store: LocalStore =
     typeof indexedDB === "undefined" ? new MemoryStore() : new IdbStore();
-  const syncer = new Syncer(store, new HttpSyncApi());
+  const syncer = new Syncer(store, new HttpSyncApi(), { images: imageWarmer() });
   const scheduler = new SyncScheduler(syncer, browserEnv());
   return { store, scheduler };
 }

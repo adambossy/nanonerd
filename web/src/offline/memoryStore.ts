@@ -1,5 +1,5 @@
 import type { BodyVersion, LocalStore } from "./store";
-import type { LocalSession, ReadMark, StoredArticle, StoredBody } from "./types";
+import type { LocalSession, ReadMark, StoredArticle, StoredBody, StoredImage } from "./types";
 
 export function compareArticles(a: StoredArticle, b: StoredArticle): number {
   if (a.priority !== b.priority) return b.priority - a.priority;
@@ -10,6 +10,7 @@ export function compareArticles(a: StoredArticle, b: StoredArticle): number {
 export class MemoryStore implements LocalStore {
   private articles = new Map<number, StoredArticle>();
   private bodies = new Map<number, StoredBody>();
+  private images = new Map<string, StoredImage>();
   private marks = new Map<number, ReadMark>();
   private sessions = new Map<string, LocalSession>();
 
@@ -19,6 +20,7 @@ export class MemoryStore implements LocalStore {
       if (keep.has(id)) continue;
       this.articles.delete(id);
       this.bodies.delete(id);
+      await this.putImagesForArticle(id, []);
       await this.deleteMarksForArticle(id);
       for (const [clientId, s] of this.sessions) {
         if (s.article_id === id) this.sessions.delete(clientId);
@@ -50,6 +52,42 @@ export class MemoryStore implements LocalStore {
       article_id: b.article_id,
       extracted_at: b.extracted_at,
     }));
+  }
+
+  async putImagesForArticle(articleId: number, urls: string[]): Promise<void> {
+    // Sizes are a property of the url, so collect them before dropping the
+    // article's rows: a url that survives the rewrite keeps its measurement.
+    const known = new Map([...this.images.values()].map((i) => [i.url, i]));
+    for (const [key, image] of this.images) {
+      if (image.article_id === articleId) this.images.delete(key);
+    }
+    for (const url of urls) {
+      this.images.set(imageKey(articleId, url), {
+        url,
+        article_id: articleId,
+        width: known.get(url)?.width ?? 0,
+        height: known.get(url)?.height ?? 0,
+      });
+    }
+  }
+
+  async imagesForArticle(articleId: number): Promise<StoredImage[]> {
+    return [...this.images.values()]
+      .filter((i) => i.article_id === articleId)
+      .map((i) => ({ ...i }));
+  }
+
+  async unmeasuredImages(): Promise<StoredImage[]> {
+    return [...this.images.values()].filter((i) => i.width === 0).map((i) => ({ ...i }));
+  }
+
+  async setImageSize(url: string, width: number, height: number): Promise<void> {
+    for (const image of this.images.values()) {
+      if (image.url === url) {
+        image.width = width;
+        image.height = height;
+      }
+    }
   }
 
   async addMarks(marks: ReadMark[]): Promise<void> {
@@ -96,6 +134,11 @@ export class MemoryStore implements LocalStore {
     const found = this.sessions.get(clientId);
     if (found) found.synced_seconds = Math.max(found.synced_seconds, seconds);
   }
+}
+
+/** Images are keyed per (article, url): the same url may appear in several articles. */
+function imageKey(articleId: number, url: string): string {
+  return `${articleId}\u0000${url}`;
 }
 
 /** Shared merge rule for sessions: both counters are max registers. */

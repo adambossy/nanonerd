@@ -29,10 +29,12 @@ export function describeStoreContract(
       expect(output).toEqual([2, 3, 1]);
     });
 
-    test("replaceArticles prunes removed articles with their bodies, marks, and sessions", async () => {
+    test("replaceArticles prunes removed articles with their bodies, images, marks, and sessions", async () => {
       await store.replaceArticles([article({ id: 1 }), article({ id: 2 })]);
       await store.putBody(body({ article_id: 1 }));
       await store.putBody(body({ article_id: 2, chunks: [] }));
+      await store.putImagesForArticle(1, ["/media/a.jpg"]);
+      await store.putImagesForArticle(2, ["/media/b.jpg"]);
       await store.addMarks([mark({ chunk_id: 10, article_id: 1 }), mark({ chunk_id: 20, article_id: 2 })]);
       await store.upsertSession(session({ client_id: "s1", article_id: 1, active_seconds: 5 }));
       await store.upsertSession(session({ client_id: "s2", article_id: 2, active_seconds: 5 }));
@@ -42,6 +44,8 @@ export function describeStoreContract(
         articles: (await store.listArticles()).map((a) => a.id),
         body1: await store.getBody(1),
         body2: (await store.getBody(2))?.article_id,
+        images1: await store.imagesForArticle(1),
+        images2: (await store.imagesForArticle(2)).map((i) => i.url),
         marks1: await store.marksForArticle(1),
         marks2: (await store.marksForArticle(2)).map((m) => m.chunk_id),
         sessions: (await store.unsyncedSessions()).map((s) => s.client_id),
@@ -51,6 +55,8 @@ export function describeStoreContract(
         articles: [2],
         body1: undefined,
         body2: 2,
+        images1: [],
+        images2: ["/media/b.jpg"],
         marks1: [],
         marks2: [20],
         sessions: ["s2"],
@@ -89,6 +95,64 @@ export function describeStoreContract(
         { article_id: 1, extracted_at: "a" },
         { article_id: 2, extracted_at: null },
       ]);
+    });
+
+    test("putImagesForArticle registers urls as unmeasured", async () => {
+      await store.putImagesForArticle(1, ["/media/a.jpg", "/media/b.jpg"]);
+
+      const output = (await store.unmeasuredImages()).map((i) => i.url).sort();
+
+      expect(output).toEqual(["/media/a.jpg", "/media/b.jpg"]);
+    });
+
+    test("setImageSize records the size and clears the url from the warm-up queue", async () => {
+      await store.putImagesForArticle(1, ["/media/a.jpg", "/media/b.jpg"]);
+
+      await store.setImageSize("/media/a.jpg", 1200, 800);
+      const output = {
+        images: (await store.imagesForArticle(1)).sort((x, y) => x.url.localeCompare(y.url)),
+        unmeasured: (await store.unmeasuredImages()).map((i) => i.url),
+      };
+
+      expect(output).toEqual({
+        images: [
+          { url: "/media/a.jpg", article_id: 1, width: 1200, height: 800 },
+          { url: "/media/b.jpg", article_id: 1, width: 0, height: 0 },
+        ],
+        unmeasured: ["/media/b.jpg"],
+      });
+    });
+
+    test("setImageSize applies to every article sharing the url", async () => {
+      await store.putImagesForArticle(1, ["/media/a.jpg"]);
+      await store.putImagesForArticle(2, ["/media/a.jpg"]);
+
+      await store.setImageSize("/media/a.jpg", 640, 480);
+      const output = (await store.imagesForArticle(2)).map((i) => [i.width, i.height]);
+
+      expect(output).toEqual([[640, 480]]);
+    });
+
+    test("putImagesForArticle keeps a known size and drops urls that left the body", async () => {
+      await store.putImagesForArticle(1, ["/media/a.jpg", "/media/gone.jpg"]);
+      await store.setImageSize("/media/a.jpg", 300, 200);
+
+      await store.putImagesForArticle(1, ["/media/a.jpg", "/media/new.jpg"]);
+      const output = (await store.imagesForArticle(1)).sort((x, y) => x.url.localeCompare(y.url));
+
+      expect(output).toEqual([
+        { url: "/media/a.jpg", article_id: 1, width: 300, height: 200 },
+        { url: "/media/new.jpg", article_id: 1, width: 0, height: 0 },
+      ]);
+    });
+
+    test("imagesForArticle returns only that article's images", async () => {
+      await store.putImagesForArticle(1, ["/media/a.jpg"]);
+      await store.putImagesForArticle(2, ["/media/b.jpg"]);
+
+      const output = (await store.imagesForArticle(1)).map((i) => i.url);
+
+      expect(output).toEqual(["/media/a.jpg"]);
     });
 
     test("addMarks keeps the existing record for an already-marked chunk", async () => {

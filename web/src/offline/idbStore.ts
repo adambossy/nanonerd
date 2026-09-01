@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { compareArticles, mergeSession } from "./memoryStore";
 import type { BodyVersion, LocalStore } from "./store";
-import type { LocalSession, ReadMark, StoredArticle, StoredBody } from "./types";
+import type { LocalSession, ReadMark, StoredArticle, StoredBody, StoredImage } from "./types";
 
 // Booleans are not valid IndexedDB index keys, so `synced` is stored as 0 | 1.
 interface MarkRow extends Omit<ReadMark, "synced"> {
@@ -11,6 +11,11 @@ interface MarkRow extends Omit<ReadMark, "synced"> {
 interface ReaderDB extends DBSchema {
   articles: { key: number; value: StoredArticle };
   bodies: { key: number; value: StoredBody };
+  images: {
+    key: [number, string];
+    value: StoredImage;
+    indexes: { by_article: number; by_url: string; by_width: number };
+  };
   marks: {
     key: number;
     value: MarkRow;
@@ -19,7 +24,7 @@ interface ReaderDB extends DBSchema {
   sessions: { key: string; value: LocalSession; indexes: { by_article: number } };
 }
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function toRow(mark: ReadMark): MarkRow {
   return { ...mark, synced: mark.synced ? 1 : 0 };
@@ -35,26 +40,44 @@ export class IdbStore implements LocalStore {
 
   constructor(name = "nanonerd-reader") {
     this.db = openDB<ReaderDB>(name, DB_VERSION, {
-      upgrade(db) {
-        db.createObjectStore("articles", { keyPath: "id" });
-        db.createObjectStore("bodies", { keyPath: "article_id" });
-        const marks = db.createObjectStore("marks", { keyPath: "chunk_id" });
-        marks.createIndex("by_article", "article_id");
-        marks.createIndex("by_synced", "synced");
-        const sessions = db.createObjectStore("sessions", { keyPath: "client_id" });
-        sessions.createIndex("by_article", "article_id");
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore("articles", { keyPath: "id" });
+          db.createObjectStore("bodies", { keyPath: "article_id" });
+          const marks = db.createObjectStore("marks", { keyPath: "chunk_id" });
+          marks.createIndex("by_article", "article_id");
+          marks.createIndex("by_synced", "synced");
+          const sessions = db.createObjectStore("sessions", { keyPath: "client_id" });
+          sessions.createIndex("by_article", "article_id");
+        }
+        if (oldVersion < 2) {
+          // Bodies cached before this store existed are reconciled by the
+          // Syncer on the next sync, so there is nothing to backfill here.
+          const images = db.createObjectStore("images", {
+            keyPath: ["article_id", "url"],
+          });
+          images.createIndex("by_article", "article_id");
+          images.createIndex("by_url", "url");
+          images.createIndex("by_width", "width");
+        }
       },
     });
   }
 
   async replaceArticles(articles: StoredArticle[]): Promise<void> {
     const db = await this.db;
-    const tx = db.transaction(["articles", "bodies", "marks", "sessions"], "readwrite");
+    const tx = db.transaction(
+      ["articles", "bodies", "images", "marks", "sessions"],
+      "readwrite",
+    );
     const keep = new Set(articles.map((a) => a.id));
     for (const id of await tx.objectStore("articles").getAllKeys()) {
       if (keep.has(id)) continue;
       await tx.objectStore("articles").delete(id);
       await tx.objectStore("bodies").delete(id);
+      for (const key of await tx.objectStore("images").index("by_article").getAllKeys(id)) {
+        await tx.objectStore("images").delete(key);
+      }
       for (const key of await tx.objectStore("marks").index("by_article").getAllKeys(id)) {
         await tx.objectStore("marks").delete(key);
       }
@@ -85,6 +108,44 @@ export class IdbStore implements LocalStore {
   async listBodyVersions(): Promise<BodyVersion[]> {
     const bodies = await (await this.db).getAll("bodies");
     return bodies.map((b) => ({ article_id: b.article_id, extracted_at: b.extracted_at }));
+  }
+
+  async putImagesForArticle(articleId: number, urls: string[]): Promise<void> {
+    const tx = (await this.db).transaction("images", "readwrite");
+    const sizes = new Map<string, StoredImage>();
+    for (const url of urls) {
+      const known = await tx.store.index("by_url").get(url);
+      if (known) sizes.set(url, known);
+    }
+    for (const key of await tx.store.index("by_article").getAllKeys(articleId)) {
+      await tx.store.delete(key);
+    }
+    for (const url of urls) {
+      const known = sizes.get(url);
+      await tx.store.put({
+        url,
+        article_id: articleId,
+        width: known?.width ?? 0,
+        height: known?.height ?? 0,
+      });
+    }
+    await tx.done;
+  }
+
+  async imagesForArticle(articleId: number): Promise<StoredImage[]> {
+    return (await this.db).getAllFromIndex("images", "by_article", articleId);
+  }
+
+  async unmeasuredImages(): Promise<StoredImage[]> {
+    return (await this.db).getAllFromIndex("images", "by_width", 0);
+  }
+
+  async setImageSize(url: string, width: number, height: number): Promise<void> {
+    const tx = (await this.db).transaction("images", "readwrite");
+    for (const row of await tx.store.index("by_url").getAll(url)) {
+      await tx.store.put({ ...row, width, height });
+    }
+    await tx.done;
   }
 
   async addMarks(marks: ReadMark[]): Promise<void> {

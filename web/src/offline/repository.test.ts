@@ -7,11 +7,20 @@ async function storeWith(opts: {
   articles?: ReturnType<typeof article>[];
   bodies?: ReturnType<typeof body>[];
   marks?: ReturnType<typeof mark>[];
+  images?: Array<[number, string, number, number]>;
 }): Promise<MemoryStore> {
   const store = new MemoryStore();
   await store.replaceArticles(opts.articles ?? []);
   for (const b of opts.bodies ?? []) await store.putBody(b);
   await store.addMarks(opts.marks ?? []);
+  const byArticle = new Map<number, string[]>();
+  for (const [articleId, url] of opts.images ?? []) {
+    byArticle.set(articleId, [...(byArticle.get(articleId) ?? []), url]);
+  }
+  for (const [articleId, urls] of byArticle) await store.putImagesForArticle(articleId, urls);
+  for (const [, url, width, height] of opts.images ?? []) {
+    if (width > 0) await store.setImageSize(url, width, height);
+  }
   return store;
 }
 
@@ -82,5 +91,41 @@ describe("loadArticle", () => {
     };
 
     expect(output).toEqual({ read: [true, true, false], percent: 75, id: 1 });
+  });
+
+  test("stamps measured image sizes into the chunk html", async () => {
+    const store = await storeWith({
+      articles: [article({ id: 1 })],
+      bodies: [
+        body({
+          article_id: 1,
+          chunks: [chunk({ id: 10, html: '<img src="/media/a.jpg"><img src="/media/b.jpg">' })],
+        }),
+      ],
+      images: [
+        [1, "/media/a.jpg", 1200, 800],
+        [1, "/media/b.jpg", 0, 0],
+      ],
+    });
+
+    const detail = await loadArticle(store, 1);
+
+    expect(detail?.chunks[0].html).toBe(
+      '<img src="/media/a.jpg" width="1200" height="800"><img src="/media/b.jpg">',
+    );
+  });
+
+  test("does not borrow another article's image sizes", async () => {
+    const store = await storeWith({
+      articles: [article({ id: 1 }), article({ id: 2 })],
+      bodies: [
+        body({ article_id: 1, chunks: [chunk({ id: 10, html: '<img src="/media/a.jpg">' })] }),
+      ],
+      images: [[2, "/media/a.jpg", 1200, 800]],
+    });
+
+    const detail = await loadArticle(store, 1);
+
+    expect(detail?.chunks[0].html).toBe('<img src="/media/a.jpg">');
   });
 });

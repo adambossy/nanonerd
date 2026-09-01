@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { FakeEnv, FakeSyncApi } from "./fakes";
+import { FakeEnv, FakeImageWarmer, FakeSyncApi } from "./fakes";
 import { article, chunk, detail } from "./fixtures";
 import { MemoryStore } from "./memoryStore";
 import { loadArticle, loadArticleList } from "./repository";
@@ -27,7 +27,8 @@ function setup() {
   const store = new MemoryStore();
   const api = new FakeSyncApi();
   const env = new FakeEnv();
-  const syncer = new Syncer(store, api);
+  const images = new FakeImageWarmer();
+  const syncer = new Syncer(store, api, { images });
   const scheduler = new SyncScheduler(syncer, env, { intervalMs: 5_000, initialBackoffMs: 1_000 });
   const statuses: SyncStatus[] = [];
   scheduler.subscribe((s) => statuses.push(s));
@@ -39,7 +40,7 @@ function setup() {
       chunks: [chunk({ id: 10, position: 0, word_count: 50 }), chunk({ id: 11, position: 1, word_count: 50 })],
     }),
   );
-  return { store, api, env, scheduler, statuses };
+  return { store, api, env, images, scheduler, statuses };
 }
 
 describe("offline layer end to end", () => {
@@ -116,6 +117,38 @@ describe("offline layer end to end", () => {
         percent: 50,
       },
       extraCalls: 0,
+    });
+  });
+
+  test("images are fetched and measured on the first sync, and stay reserved once offline", async () => {
+    const { store, api, images, scheduler, statuses } = setup();
+    api.details.set(
+      1,
+      detail({
+        id: 1,
+        chunks: [chunk({ id: 10, position: 0, html: '<p>a</p><img src="/media/a.jpg" loading="lazy">' })],
+      }),
+    );
+    images.sizes.set("/media/a.jpg", { width: 1200, height: 800 });
+
+    scheduler.start();
+    await settle(statuses);
+    await flush();
+
+    // The subway: nothing more reaches the network, but the article still
+    // renders with its image box reserved at the right height.
+    api.offline = true;
+    images.broken.add("/media/a.jpg");
+    await scheduler.syncNow();
+    await flush();
+    const output = {
+      warmedOnce: images.warmed,
+      html: (await loadArticle(store, 1))?.chunks[0].html,
+    };
+
+    expect(output).toEqual({
+      warmedOnce: ["/media/a.jpg"],
+      html: '<p>a</p><img src="/media/a.jpg" loading="lazy" width="1200" height="800">',
     });
   });
 

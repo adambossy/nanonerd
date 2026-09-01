@@ -5,7 +5,14 @@ import type { SyncOptions, SyncResult } from "./syncer";
 import { SyncError } from "./transport";
 import type { SyncStatus } from "./types";
 
-const OK: SyncResult = { pushedMarks: 0, pushedSessions: 0, refreshed: true, prefetched: 0, error: null };
+const OK: SyncResult = {
+  pushedMarks: 0,
+  pushedSessions: 0,
+  refreshed: true,
+  prefetched: 0,
+  warmedImages: 0,
+  error: null,
+};
 const OFFLINE: SyncResult = { ...OK, refreshed: false, error: new SyncError("network", null) };
 
 class FakeSyncer implements SyncRunner {

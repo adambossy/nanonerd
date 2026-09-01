@@ -1,3 +1,5 @@
+import { imageUrlsIn } from "./images";
+import { noImageWarmer, type ImageWarmer } from "./imageWarmer";
 import { percentFor } from "./reading";
 import type { LocalStore } from "./store";
 import { SyncError, type RequestOptions, type SyncApi } from "./transport";
@@ -24,11 +26,16 @@ export interface SyncResult {
   pushedSessions: number;
   refreshed: boolean;
   prefetched: number;
+  warmedImages: number;
   error: SyncError | null;
 }
 
 export interface SyncerOptions {
   prefetchConcurrency?: number;
+  /** Loads article images into the offline cache; omitted where there is no DOM. */
+  images?: ImageWarmer;
+  /** Cap on images loaded per sync, so one image-heavy article cannot stall the rest. */
+  warmBatch?: number;
 }
 
 // Server percent is rounded to one decimal; anything beyond that is real divergence.
@@ -36,6 +43,10 @@ const PERCENT_EPSILON = 0.05;
 
 export class Syncer {
   private readonly prefetchConcurrency: number;
+  private readonly images: ImageWarmer;
+  private readonly warmBatch: number;
+  /** Articles whose cached body has already been matched against the image store this session. */
+  private readonly imagesRegistered = new Set<number>();
 
   constructor(
     private readonly store: LocalStore,
@@ -43,6 +54,8 @@ export class Syncer {
     opts: SyncerOptions = {},
   ) {
     this.prefetchConcurrency = opts.prefetchConcurrency ?? 3;
+    this.images = opts.images ?? noImageWarmer;
+    this.warmBatch = opts.warmBatch ?? 24;
   }
 
   /** Send every unsynced mark, one request per article. Returns the number of marks acknowledged. */
@@ -84,29 +97,42 @@ export class Syncer {
 
   /** Download bodies that are missing, re-extracted, or behind the server's read state. */
   async prefetchBodies(): Promise<number> {
-    const candidates = await this.bodiesNeedingFetch();
     let fetched = 0;
-    const queue = [...candidates];
-    const worker = async (): Promise<void> => {
-      for (let next = queue.shift(); next; next = queue.shift()) {
-        if (await this.fetchBody(next)) fetched += 1;
-      }
-    };
-    const workers = Array.from(
-      { length: Math.min(this.prefetchConcurrency, queue.length) },
-      () => worker(),
-    );
-    await Promise.all(workers);
+    await this.inParallel(await this.bodiesNeedingFetch(), async (article) => {
+      if (await this.fetchBody(article)) fetched += 1;
+    });
     return fetched;
   }
 
-  /** Push, then pull, then prefetch. Stops at the first retryable error and reports it. */
+  /**
+   * Load article images into the offline cache and remember their natural
+   * sizes. Runs only after a successful pull, so a dead connection never
+   * spends attempts, and each image is loaded once: after that the service
+   * worker answers from cache and the reader stops depending on the network
+   * to keep an image on screen.
+   */
+  async warmImages(): Promise<number> {
+    await this.registerImagesForCachedBodies();
+    const pending = await this.store.unmeasuredImages();
+    const urls = [...new Set(pending.map((i) => i.url))].slice(0, this.warmBatch);
+    let warmed = 0;
+    await this.inParallel(urls, async (url) => {
+      const size = await this.images.warm(url);
+      if (!size) return;
+      await this.store.setImageSize(url, size.width, size.height);
+      warmed += 1;
+    });
+    return warmed;
+  }
+
+  /** Push, then pull, then prefetch bodies and their images. Stops at the first retryable error and reports it. */
   async syncAll(opts: SyncOptions = {}): Promise<SyncResult> {
     const result: SyncResult = {
       pushedMarks: 0,
       pushedSessions: 0,
       refreshed: false,
       prefetched: 0,
+      warmedImages: 0,
       error: null,
     };
     try {
@@ -116,6 +142,7 @@ export class Syncer {
       await this.refreshArticles();
       result.refreshed = true;
       result.prefetched = await this.prefetchBodies();
+      result.warmedImages = await this.warmImages();
     } catch (error) {
       if (!(error instanceof SyncError)) throw error;
       result.error = error;
@@ -153,6 +180,21 @@ export class Syncer {
     return needed;
   }
 
+  /**
+   * Give bodies that were cached before this device tracked images their image
+   * rows. Each article is inspected at most once per page load: a body already
+   * has rows, or is read once to create them.
+   */
+  private async registerImagesForCachedBodies(): Promise<void> {
+    for (const article of await this.store.listArticles()) {
+      if (this.imagesRegistered.has(article.id)) continue;
+      this.imagesRegistered.add(article.id);
+      if ((await this.store.imagesForArticle(article.id)).length > 0) continue;
+      const body = await this.store.getBody(article.id);
+      if (body) await this.store.putImagesForArticle(article.id, imageUrlsIn(body.chunks));
+    }
+  }
+
   private async serverIsAhead(article: StoredArticle): Promise<boolean> {
     const [body, marks] = await Promise.all([
       this.store.getBody(article.id),
@@ -175,7 +217,25 @@ export class Syncer {
       extracted_at: detail.extracted_at,
       chunks: detail.chunks,
     });
+    await this.store.putImagesForArticle(article.id, imageUrlsIn(detail.chunks));
+    this.imagesRegistered.add(article.id);
     return true;
+  }
+
+  /** Run `work` over `items` with at most `prefetchConcurrency` in flight. */
+  private async inParallel<T>(
+    items: T[],
+    work: (item: T) => Promise<void>,
+  ): Promise<void> {
+    const queue = [...items];
+    const worker = async (): Promise<void> => {
+      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+        await work(next);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(this.prefetchConcurrency, queue.length) }, worker),
+    );
   }
 
   /** Run a push; "ok" on success, "terminal" on a non-retryable SyncError; rethrows otherwise. */

@@ -1,4 +1,5 @@
 import type { ArticleDetail, ArticleSummary } from "../types";
+import { withImageSizes } from "./images";
 import { percentFor, readIdsFor } from "./reading";
 import type { LocalStore } from "./store";
 
@@ -27,16 +28,22 @@ export async function loadArticle(
   store: LocalStore,
   id: number,
 ): Promise<ArticleDetail | undefined> {
-  const [article, body, marks] = await Promise.all([
+  const [article, body, marks, images] = await Promise.all([
     store.getArticle(id),
     store.getBody(id),
     store.marksForArticle(id),
+    store.imagesForArticle(id),
   ]);
   if (!article || !body) return undefined;
   const readIds = readIdsFor(body, marks);
+  const sizes = new Map(images.filter((i) => i.width > 0).map((i) => [i.url, i]));
   return {
     ...article,
     percent_read: percentFor(article, body, marks),
-    chunks: body.chunks.map((c) => ({ ...c, read: readIds.has(c.id) })),
+    chunks: body.chunks.map((c) => ({
+      ...c,
+      html: withImageSizes(c.html, sizes),
+      read: readIds.has(c.id),
+    })),
   };
 }
