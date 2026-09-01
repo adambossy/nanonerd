@@ -48,6 +48,9 @@ class Article(Base):
     extracted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=None
     )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     # Extraction-fidelity annotations. These never change `status`; they say how
     # much of the article actually survived the trip into the reader.
     fidelity_status: Mapped[str | None] = mapped_column(String(16), default=None)
