@@ -3,6 +3,7 @@ import type { MouseEvent } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { requestSnapshot } from "../api";
 import { loadArticle, offline } from "../offline";
+import { scrollToAndHold } from "../reader/anchorScroll";
 import { fidelityNotice } from "../reader/fidelity";
 import { loadReaderMode, saveReaderMode, type ReaderMode } from "../reader/readerMode";
 import { SnapshotView } from "../reader/SnapshotView";
@@ -28,6 +29,13 @@ function jumpToFragment(event: MouseEvent<HTMLElement>) {
 }
 const RESUME_FAB_FADE_DISTANCE = 120; // px of scroll over which the resume fab fades out
 const SNAPSHOT_POLL_MS = 3000;
+
+/** Which chunk the reader should open on, or null to stay at the top. */
+function openingChunkId(article: ArticleDetail, requested: string | null): string | number | null {
+  if (requested) return requested;
+  const firstUnread = article.chunks.find((c) => !c.read);
+  return firstUnread && firstUnread.position > 0 ? firstUnread.id : null;
+}
 
 type LoadState = "loading" | "ready" | "unavailable" | "invalid";
 
@@ -185,26 +193,24 @@ export default function Reader() {
   }, [articleId, snapshot?.status]);
 
   // Open at the requested chunk, otherwise at the earliest unread chunk
-  // (once per article, once the chunk elements exist in `chunkRoot`).
+  // (once per article, once the chunk elements exist in `chunkRoot`). The
+  // opening position is then held while images finish loading, so the reader
+  // lands where they left off rather than wherever the page has grown to.
   useEffect(() => {
     if (!article || !chunkRoot || scrolledForRef.current === articleId) return;
     scrolledForRef.current = articleId;
-    if (targetChunk) {
-      chunkRoot.querySelector(`[data-chunk-id="${targetChunk}"]`)?.scrollIntoView();
-      return;
-    }
-    const firstUnread = article.chunks.find((c) => !c.read);
-    if (firstUnread && firstUnread.position > 0) {
-      chunkRoot
-        .querySelector(`[data-chunk-id="${firstUnread.id}"]`)
-        ?.scrollIntoView();
-    }
-    if (resumed) {
-      requestAnimationFrame(() => {
-        resumeBaselineRef.current = window.scrollY;
-      });
-    }
-  }, [article, articleId, chunkRoot, targetChunk, resumed]);
+    const opening = openingChunkId(article, targetChunk);
+    if (opening === null) return;
+    const target = chunkRoot.querySelector(`[data-chunk-id="${opening}"]`);
+    if (!target) return;
+    const release = scrollToAndHold(target, {
+      onAdjust: (scrollY) => {
+        resumeBaselineRef.current = scrollY;
+      },
+    });
+    resumeBaselineRef.current = window.scrollY;
+    return release;
+  }, [article, articleId, chunkRoot, targetChunk]);
 
   const percent = useMemo(() => {
     if (!article) return 0;
