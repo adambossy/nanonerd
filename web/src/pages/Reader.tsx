@@ -231,13 +231,6 @@ export default function Reader() {
       .catch(() => setSnapshotLoadError("could not start capture"));
   };
 
-  const handleSnapshotMount = useCallback((root: ShadowRoot | null) => {
-    setShadowRoot(root);
-  }, []);
-  const handleSnapshotError = useCallback((message: string) => {
-    setSnapshotLoadError(message);
-  }, []);
-
   if (state === "invalid" || state === "unavailable") {
     return (
       <main className="reader">
@@ -338,8 +331,8 @@ export default function Reader() {
         <SnapshotView
           articleId={articleId}
           readIds={readIds}
-          onMount={handleSnapshotMount}
-          onError={handleSnapshotError}
+          onMount={setShadowRoot}
+          onError={setSnapshotLoadError}
         />
       )}
       {resumed && (

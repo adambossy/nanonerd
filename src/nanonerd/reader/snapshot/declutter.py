@@ -394,7 +394,7 @@ def _is_sprite_svg(element: _Element) -> bool:
     )
 
 
-def _remove_outside(container: _Element, body: _Element, removed: list[str]) -> None:
+def _remove_outside(container: _Element, body: _Element) -> None:
     if container is body:
         return
     child = container
@@ -407,7 +407,6 @@ def _remove_outside(container: _Element, body: _Element, removed: list[str]) -> 
                 or _is_sprite_svg(sibling)
             ):
                 continue
-            removed.append(describe(sibling))
             parent.remove(sibling)
         if parent is body:
             break
@@ -459,7 +458,7 @@ def _is_screen_reader_only(element: _Element) -> bool:
     return bool(classes & SR_ONLY_CLASSES)
 
 
-def _remove_inside(container: _Element, title: str | None, removed: list[str]) -> None:
+def _remove_inside(container: _Element, title: str | None) -> None:
     title_heading = find_title_heading(container, title)
     for element in list(iter_elements(container)):
         if element is container or not _contains(container, element):
@@ -467,17 +466,14 @@ def _remove_inside(container: _Element, title: str | None, removed: list[str]) -
         if element.get("hidden") is not None or _is_screen_reader_only(element):
             _drop(element)
         elif _is_junk(element, title_heading):
-            removed.append(describe(element))
             _drop(element)
 
 
-def remove_chrome(container: _Element, body: _Element, title: str | None) -> list[str]:
+def remove_chrome(container: _Element, body: _Element, title: str | None) -> None:
     """Drop everything outside the container (except styles) and obvious junk
-    inside it. Returns short descriptions of what was removed."""
-    removed: list[str] = []
-    _remove_outside(container, body, removed)
-    _remove_inside(container, title, removed)
-    return removed
+    inside it."""
+    _remove_outside(container, body)
+    _remove_inside(container, title)
 
 
 def _has_direct_text(element: _Element) -> bool:

@@ -182,20 +182,10 @@ def test_assemble_snapshot_wraps_body_and_scopes_root_css():
     assert observed == expected_output
 
 
-def test_assemble_snapshot_reports_container_and_removals():
+def test_assemble_snapshot_locates_article_container():
     output = build(BLOG_HTML)
 
-    assert (output.container, sorted(output.removed)) == (
-        "article",
-        [
-            "aside.sidebar",
-            "div#comments",
-            "div.share-buttons",
-            "footer.site-footer",
-            "form.subscribe",
-            "header.site-header",
-        ],
-    )
+    assert output.container == "article"
 
 
 def test_assemble_snapshot_inlines_captured_images_and_fonts():

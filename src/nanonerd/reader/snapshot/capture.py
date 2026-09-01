@@ -1,7 +1,7 @@
 """Render a URL in headless Chromium at a phone viewport and return the post-JS
 DOM plus the CSS/font/image responses the page loaded (for inlining)."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 import threading
 from typing import Any, cast
@@ -41,7 +41,7 @@ class CaptureLimits:
 class CapturedPage:
     url: str
     html: str
-    resources: dict[str, Resource] = field(default_factory=dict)
+    resources: dict[str, Resource]
 
 
 def _wants_body(response: Response) -> bool:

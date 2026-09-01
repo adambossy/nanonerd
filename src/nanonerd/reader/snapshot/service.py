@@ -30,10 +30,6 @@ _BUILD_ATTEMPTS = (BuildLimits(), BuildLimits(max_image_bytes=0))
 CaptureFn = Callable[[str], CapturedPage]
 
 
-class SnapshotTooLargeError(ValueError):
-    pass
-
-
 def _build_within_budget(captured: CapturedPage, title: str | None) -> SnapshotBuild:
     build: SnapshotBuild | None = None
     for limits in _BUILD_ATTEMPTS:
@@ -47,7 +43,7 @@ def _build_within_budget(captured: CapturedPage, title: str | None) -> SnapshotB
         if len(build.html.encode("utf-8")) <= MAX_SNAPSHOT_BYTES:
             return build
     assert build is not None  # noqa: S101 - loop always runs at least once
-    raise SnapshotTooLargeError(
+    raise ValueError(
         f"snapshot too large ({len(build.html.encode('utf-8'))} bytes > "
         f"{MAX_SNAPSHOT_BYTES})"
     )

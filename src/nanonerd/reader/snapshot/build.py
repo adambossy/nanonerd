@@ -2,7 +2,7 @@
 snapshot document."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import re
 from urllib.parse import urljoin
 
@@ -42,7 +42,6 @@ class SnapshotBuild:
     html: str
     chunks: list[ChunkData]
     container: str
-    removed: list[str] = field(default_factory=list)
 
 
 def _ensure_charset(head: _Element) -> None:
@@ -198,7 +197,7 @@ def assemble_snapshot(
 
     container = declutter.locate_container(body, title)
     container_label = declutter.describe(container)
-    removed = declutter.remove_chrome(container, body, title)
+    declutter.remove_chrome(container, body, title)
 
     blocks = declutter.collect_blocks(container)
     _inline_images(root, resources, url, limits)
@@ -213,9 +212,7 @@ def assemble_snapshot(
     document = etree.tostring(
         root, encoding="unicode", doctype="<!DOCTYPE html>", method="html"
     )
-    return SnapshotBuild(
-        html=document, chunks=chunks, container=container_label, removed=removed
-    )
+    return SnapshotBuild(html=document, chunks=chunks, container=container_label)
 
 
 def attach_chunk_ids(snapshot_html: str, chunk_ids: list[int]) -> str:
