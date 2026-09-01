@@ -50,6 +50,7 @@ const EMPTY_RESULT: SyncResult = {
   pushedSessions: 0,
   refreshed: false,
   prefetched: 0,
+  warmedImages: 0,
   error: null,
 };
 

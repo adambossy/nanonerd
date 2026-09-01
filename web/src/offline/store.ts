@@ -1,4 +1,4 @@
-import type { LocalSession, ReadMark, StoredArticle, StoredBody } from "./types";
+import type { LocalSession, ReadMark, StoredArticle, StoredBody, StoredImage } from "./types";
 
 export interface BodyVersion {
   article_id: number;
@@ -11,7 +11,7 @@ export interface BodyVersion {
  * `MemoryStore` in tests. All methods are safe to call concurrently.
  */
 export interface LocalStore {
-  /** Replace the whole list. Articles absent from `articles` are removed along with their bodies, marks, and sessions. */
+  /** Replace the whole list. Articles absent from `articles` are removed along with their bodies, images, marks, and sessions. */
   replaceArticles(articles: StoredArticle[]): Promise<void>;
   /** Ordered like the server list: priority desc, then added_at desc. */
   listArticles(): Promise<StoredArticle[]>;
@@ -27,6 +27,14 @@ export interface LocalStore {
   unsyncedMarks(): Promise<ReadMark[]>;
   markMarksSynced(chunkIds: number[]): Promise<void>;
   deleteMarksForArticle(articleId: number): Promise<void>;
+
+  /** Replace one article's image list; a url whose size is already known keeps it. */
+  putImagesForArticle(articleId: number, urls: string[]): Promise<void>;
+  imagesForArticle(articleId: number): Promise<StoredImage[]>;
+  /** Images still waiting to be loaded and measured, across every article. */
+  unmeasuredImages(): Promise<StoredImage[]>;
+  /** Record a natural size against every row sharing this url. */
+  setImageSize(url: string, width: number, height: number): Promise<void>;
 
   /** Insert or update; active_seconds and synced_seconds each take the max of old and new. */
   upsertSession(session: LocalSession): Promise<void>;

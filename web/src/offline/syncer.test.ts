@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { FakeSyncApi, deferred } from "./fakes";
+import { FakeImageWarmer, FakeSyncApi, deferred } from "./fakes";
 import { article, body, chunk, detail, mark, session } from "./fixtures";
 import { MemoryStore } from "./memoryStore";
 import { Syncer } from "./syncer";
@@ -8,11 +8,19 @@ import { SyncError, type MarkPayload } from "./transport";
 const NETWORK = new SyncError("network", null);
 const GONE = new SyncError("http", 404);
 
-async function setup(seed: (store: MemoryStore, api: FakeSyncApi) => Promise<void> = async () => {}) {
+async function setup(
+  seed: (store: MemoryStore, api: FakeSyncApi, images: FakeImageWarmer) => Promise<void> = async () => {},
+) {
   const store = new MemoryStore();
   const api = new FakeSyncApi();
-  await seed(store, api);
-  return { store, api, syncer: new Syncer(store, api, { prefetchConcurrency: 2 }) };
+  const images = new FakeImageWarmer();
+  await seed(store, api, images);
+  return {
+    store,
+    api,
+    images,
+    syncer: new Syncer(store, api, { prefetchConcurrency: 2, images }),
+  };
 }
 
 describe("Syncer.pushMarks", () => {
@@ -253,7 +261,7 @@ describe("Syncer.syncAll", () => {
 
     expect(output).toEqual({
       ops: ["postMarks", "putSession", "fetchArticles", "fetchArticle"],
-      result: { pushedMarks: 1, pushedSessions: 1, refreshed: true, prefetched: 1, error: null },
+      result: { pushedMarks: 1, pushedSessions: 1, refreshed: true, prefetched: 1, warmedImages: 0, error: null },
     });
   });
 
@@ -268,7 +276,7 @@ describe("Syncer.syncAll", () => {
 
     expect(output).toEqual({
       ops: ["postMarks"],
-      result: { pushedMarks: 0, pushedSessions: 0, refreshed: false, prefetched: 0, error: NETWORK },
+      result: { pushedMarks: 0, pushedSessions: 0, refreshed: false, prefetched: 0, warmedImages: 0, error: NETWORK },
     });
   });
 
@@ -280,6 +288,101 @@ describe("Syncer.syncAll", () => {
     await syncer.syncAll({ pushOnly: true, keepalive: true });
 
     expect([api.ops(), api.calls[0].args[2]]).toEqual([["postMarks"], { keepalive: true }]);
+  });
+});
+
+describe("Syncer.warmImages", () => {
+  const withImages = detail({
+    id: 1,
+    chunks: [
+      chunk({ id: 10, position: 0, html: '<p>a</p><img src="/media/a.jpg">' }),
+      chunk({ id: 11, position: 1, html: '<img src="/media/b.jpg">' }),
+    ],
+  });
+
+  test("loads every image a prefetched body references and records its size", async () => {
+    const { store, images, syncer } = await setup(async (store, api, images) => {
+      api.articles = [article({ id: 1 })];
+      api.details.set(1, withImages);
+      images.sizes.set("/media/a.jpg", { width: 1200, height: 800 });
+    });
+
+    const result = await syncer.syncAll();
+    const output = {
+      warmedImages: result.warmedImages,
+      warmed: [...images.warmed].sort(),
+      stored: (await store.imagesForArticle(1))
+        .sort((x, y) => x.url.localeCompare(y.url))
+        .map((i) => [i.url, i.width, i.height]),
+    };
+
+    expect(output).toEqual({
+      warmedImages: 2,
+      warmed: ["/media/a.jpg", "/media/b.jpg"],
+      stored: [
+        ["/media/a.jpg", 1200, 800],
+        ["/media/b.jpg", 100, 50],
+      ],
+    });
+  });
+
+  test("loads each image once; a second sync has nothing left to warm", async () => {
+    const { images, syncer } = await setup(async (store, api) => {
+      api.articles = [article({ id: 1 })];
+      api.details.set(1, withImages);
+    });
+
+    await syncer.syncAll();
+    images.warmed = [];
+    const result = await syncer.syncAll();
+
+    expect([images.warmed, result.warmedImages]).toEqual([[], 0]);
+  });
+
+  test("registers images for a body cached before the image store existed", async () => {
+    const { store, images, syncer } = await setup(async (store, api) => {
+      await store.replaceArticles([article({ id: 1 })]);
+      await store.putBody(body({ article_id: 1, chunks: withImages.chunks }));
+      api.articles = [article({ id: 1 })];
+      api.details.set(1, withImages);
+    });
+
+    await syncer.warmImages();
+    const output = {
+      warmed: [...images.warmed].sort(),
+      fetched: (await store.imagesForArticle(1)).length,
+    };
+
+    expect(output).toEqual({ warmed: ["/media/a.jpg", "/media/b.jpg"], fetched: 2 });
+  });
+
+  test("an image that will not load stays queued and does not fail the sync", async () => {
+    const { store, syncer } = await setup(async (store, api, images) => {
+      api.articles = [article({ id: 1 })];
+      api.details.set(1, withImages);
+      images.broken.add("/media/a.jpg");
+    });
+
+    const result = await syncer.syncAll();
+    const output = {
+      error: result.error,
+      warmedImages: result.warmedImages,
+      queued: (await store.unmeasuredImages()).map((i) => i.url),
+    };
+
+    expect(output).toEqual({ error: null, warmedImages: 1, queued: ["/media/a.jpg"] });
+  });
+
+  test("loads at most warmBatch images per sync", async () => {
+    const store = new MemoryStore();
+    const api = new FakeSyncApi();
+    const images = new FakeImageWarmer();
+    await store.putImagesForArticle(1, ["/media/a.jpg", "/media/b.jpg", "/media/c.jpg"]);
+    const syncer = new Syncer(store, api, { images, warmBatch: 2 });
+
+    const warmed = await syncer.warmImages();
+
+    expect([warmed, images.warmed.length]).toEqual([2, 2]);
   });
 });
 

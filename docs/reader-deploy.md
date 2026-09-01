@@ -34,6 +34,17 @@ read marks / reading time to `POST /api/articles/{id}/progress` and
 `PUT /api/sessions/{client_id}` when connectivity returns. After a deploy the
 installed PWA updates on its next open (`registerType: "autoUpdate"`).
 
+Article *images* are the one thing the service worker does cache, in a
+`CacheFirst` runtime cache named `article-images` (see `web/vite.config.ts`).
+They are content-addressed and immutable, so a stored image is never
+re-requested and a connection that drops mid-article cannot take one back off
+the page. Each sync loads any image it has not seen yet, which both fills that
+cache and records the image's natural size in IndexedDB; the reader stamps
+those sizes onto the `<img>` tags so an image reserves its space before its
+bytes arrive. The cache holds 400 entries for 180 days and drops the oldest
+under quota pressure — cross-origin media responses are opaque, and browsers
+charge those against the quota at a heavy padded size.
+
 ### Rendering and memory
 
 Articles are rendered in headless Chromium (Playwright) before extraction, so

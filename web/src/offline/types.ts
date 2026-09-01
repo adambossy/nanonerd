@@ -10,6 +10,18 @@ export interface StoredBody {
   chunks: ChunkData[];
 }
 
+/**
+ * An image referenced by a cached body. `width`/`height` are 0 until the image
+ * has been loaded once; loading it is also what puts its bytes in the offline
+ * image cache, so an unmeasured row doubles as the warm-up queue.
+ */
+export interface StoredImage {
+  url: string;
+  article_id: number;
+  width: number;
+  height: number;
+}
+
 /** A chunk the user read on this device. Grow-only; earliest read_at wins. */
 export interface ReadMark {
   chunk_id: number;

@@ -1,4 +1,5 @@
 import type { ArticleDetail, ArticleSummary } from "../types";
+import type { ImageSize, ImageWarmer } from "./imageWarmer";
 import type { SchedulerEnv, SchedulerEvent } from "./scheduler";
 import { SyncError, type MarkPayload, type RequestOptions, type SessionPayload, type SyncApi } from "./transport";
 
@@ -84,6 +85,20 @@ export class FakeSyncApi implements SyncApi {
 
   private throwIfOffline(): void {
     if (this.offline) throw new SyncError("network", null);
+  }
+}
+
+/** ImageWarmer that reports a fixed size per url and records what it was asked to load. */
+export class FakeImageWarmer implements ImageWarmer {
+  sizes = new Map<string, ImageSize>();
+  /** Urls that fail to load, however often they are retried. */
+  broken = new Set<string>();
+  warmed: string[] = [];
+
+  async warm(url: string): Promise<ImageSize | null> {
+    this.warmed.push(url);
+    if (this.broken.has(url)) return null;
+    return this.sizes.get(url) ?? { width: 100, height: 50 };
   }
 }
 
