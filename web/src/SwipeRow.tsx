@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useRef,
   useState,
   type MouseEvent,
@@ -55,11 +54,11 @@ export default function SwipeRow({
     ? ICON_SCALE_SETTLED
     : ICON_SCALE_MIN + (ICON_SCALE_MAX - ICON_SCALE_MIN) * progress;
 
-  const reset = useCallback(() => {
+  const reset = () => {
     axisRef.current = null;
     setDragging(false);
     setDx(0);
-  }, []);
+  };
 
   const complete = (event: PointerEvent<HTMLDivElement>, which: Side) => {
     axisRef.current = null;
@@ -142,7 +141,7 @@ export default function SwipeRow({
   return (
     <div
       ref={rowRef}
-      className={`swipe-row${dragging ? " is-dragging" : ""}${leaving ? " is-committed" : ""}`}
+      className={`swipe-row${leaving ? " is-committed" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
